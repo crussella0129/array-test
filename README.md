@@ -17,8 +17,13 @@ protocol (Research → Plan → Build → Test → Loop; the filesystem is the s
 - [`docs/SCHEMA-ANALYSIS.md`](docs/SCHEMA-ANALYSIS.md) — reading of the original schema.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the deterministic/provable design.
 
+## Toolchain
+**Rust** core engine (content addressing, DAG resolver, hermetic runner, ledger/Merkle
+root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, connected by
+**TAP** as a language-agnostic evidence contract (`decisions.md` D8).
+
 ## Sprint-loop state
-- `decisions.md` — architectural decision log (D1–D7).
+- `decisions.md` — architectural decision log (D1–D8).
 - `confidence.txt` — sprint-loop confidence throttle.
 - `agent-tasks/` — active backlog + completion log.
 - `sprints/s0/` — design sprint (closed, green): research report + locked build/test plans.

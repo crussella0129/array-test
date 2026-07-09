@@ -57,26 +57,29 @@ roundtrip  = "detokenize(tokenize(x)) == normalize(x)"
 monotonic  = "len(tokenize(x)) <= len(x)"
 ```
 
-**Authoring convention:** individual test cases (`tests/`) are written in
-[riteway](https://github.com/crussella0129/riteway)'s `given / should / actual / expected`
-shape, e.g.:
+**Authoring convention:** individual test cases (`tests/`) are written in a
+`given / should / actual / expected` shape — the convention
+[riteway](https://github.com/crussella0129/riteway) organizes its API around — e.g. in
+Rust:
 
-```js
-describe('tokenize()', async assert => {
-  assert({
-    given: 'an empty byte string',
-    should: 'return an empty token list',
-    actual: tokenize(new Uint8Array()),
-    expected: []
-  });
-});
+```rust
+#[test]
+fn tokenize_empty_input() {
+    // given: an empty byte string
+    // should: return an empty token list
+    let actual = tokenize(&[]);
+    let expected: Vec<Token> = vec![];
+    assert_eq!(actual, expected);
+}
 ```
 
 This is adopted deliberately, not incidentally (see D6 in `decisions.md`): the
 `given/should/actual/expected` shape forces every test to answer the same five questions
 §7 needs answered anyway (unit under test, expected behavior, actual output, expected
-output, reproduction), and its output — **TAP** (Test Anything Protocol) — becomes the raw
-`evidence` a cell's confirmation hashes over (§2), instead of a bespoke evidence format.
+output, reproduction). The shape is language-agnostic; what's load-bearing is the output —
+**TAP** (Test Anything Protocol) — which becomes the raw `evidence` a cell's confirmation
+hashes over (§2), instead of a bespoke evidence format. Per D8, the engine itself is Rust;
+riteway (JS) is an optional adapter for units written in JS, not a dependency of the core.
 
 ### 1.3 Integration DAG
 Edges = declared `deps`. The DAG is the **only** source of integration scope — we never
@@ -350,14 +353,19 @@ that same machine at a third, smaller timescale — one unit instead of one spri
 
 ## 10. Build order (forward reference to the backlog)
 
-1. Content-addressing + manifest/contract schema (`code_hash`, `cell_key`).
-2. Integration DAG resolver + impact (reverse-dep) closure.
-3. Hermetic cell runner + determinism meta-check.
-4. Confirmation ledger (append-only, hash-chained) + Merkle root (Phase D).
-5. Frontier selection (memoized; cache reuse).
-6. riteway/TAP evidence adapter (§1.2) — `given/should/actual/expected` → TAP → `evidence_hash`.
-7. Property-based + contract tiers; optional formal tier.
+1. Content-addressing + manifest/contract schema (`code_hash`, `cell_key`) — Rust.
+2. Integration DAG resolver + impact (reverse-dep) closure — Rust (`petgraph`).
+3. Hermetic cell runner + determinism meta-check — Rust.
+4. Confirmation ledger (append-only, hash-chained) + Merkle root (Phase D) — Rust.
+5. Frontier selection (memoized; cache reuse) — Rust.
+6. TAP evidence adapter (§1.2) — `given/should/actual/expected` → TAP → `evidence_hash`.
+   Native Rust test harness emits TAP directly; riteway remains available as an optional
+   adapter for any unit written in JS.
+7. Property-based tier via Python + Hypothesis (subprocess, TAP across the same evidence
+   boundary as §6); contract tier (pre/post/invariants) in Rust; optional formal tier via
+   Kani.
 8. Judge gate (Phase J) + judgment ledger + repair micro-loop (§4).
-9. CLI + sprint-loop wiring.
+9. CLI + sprint-loop wiring — Rust.
 
-See `agent-tasks/agent-tasks.md` and `sprints/s1/` for the concrete next sprint.
+Toolchain locked in D8 (`decisions.md`): Rust core engine, Python/Hypothesis for property
+tests. See `agent-tasks/agent-tasks.md` and `sprints/s1/` for the concrete next sprint.

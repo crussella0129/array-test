@@ -18,6 +18,8 @@ locked in this sprint's research.
 - [x] `decisions.md` D6, D7 recorded.
 - [x] `agent-tasks/agent-tasks.md` reordered with T6 (evidence adapter), T9/T10 (judge
   gate + repair micro-loop).
+- [x] Toolchain assessed (Rust vs. Python vs. Node/TS) and locked: Rust core engine +
+  Python/Hypothesis property tier. `decisions.md` D8 recorded; resolves R-d.
 - [ ] T1 content addressing + schemas implemented.
 - [ ] T2 integration DAG resolver implemented.
 - [ ] Committed & pushed.

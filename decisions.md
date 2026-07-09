@@ -34,18 +34,18 @@ for critical units, recording the guarantee level per cell.
 **Decision:** Each sprint's Test phase runs exactly one round; its green root is the gate
 the next sprint reads (the schema's "loop back to current sprint").
 
-## D6 — Adopt riteway's given/should/actual/expected + TAP as evidence (s1 research)
+## D6 — Adopt given/should/actual/expected + TAP as evidence (s1 research)
 **Context:** Researched `crussella0129/riteway`, an AI-native testing framework built
 around RITE (Readable, Isolated, Thorough, Explicit) and the "5 questions every unit test
 must answer." Its assertion shape already forces tests to answer exactly what
 `ARCHITECTURE.md §7` needs, and its output (TAP — Test Anything Protocol) is a
 standardized, tool-compatible evidence format.
-**Decision:** `tests/` are authored in riteway's `given/should/actual/expected` shape;
-TAP output is hashed into `evidence_hash` (§1.2, §2) instead of a bespoke format. This
-leans the implementation toolchain toward Node/JS, settling open question R-d from the s0
-research report.
+**Decision:** `tests/` are authored in the `given/should/actual/expected` shape; TAP
+output is hashed into `evidence_hash` (§1.2, §2) instead of a bespoke format.
 **Consequence:** No evidence format to invent or maintain; test authoring is
-agent-legible by construction.
+agent-legible by construction; the evidence contract is language-agnostic (TAP), so it
+does not by itself dictate the implementation language — see **D8**, which supersedes
+this decision's original lean toward Node/JS.
 
 ## D7 — Two-phase confirmation gate: deterministic AND judged, with a repair micro-loop (s1 research)
 **Context:** Passing tests (Phase D) proves code doesn't crash and satisfies the
@@ -67,3 +67,31 @@ pass/fail. Fix cost for a rejected unit is bounded to that unit, not the whole s
 **Alternatives rejected:** Recording the judge tier as an independent, non-gating
 annotation (weaker — a spec-unfaithful unit could still ship); folding the judge rating
 into the Merkle root (would break reproducibility of the root itself).
+
+## D8 — Rust core engine + Python (Hypothesis) property tier; resolves R-d (s1)
+**Context:** D6's lean toward Node/JS was an accident of riteway being JS-native, not a
+requirement of the architecture — TAP (D6) is language-agnostic. User is a primarily-Rust,
+sometimes-Python developer; assessed Rust, Python, and Node/TS against the concrete
+requirements in `ARCHITECTURE.md`: hermetic determinism (§6), `code_hash`/`cell_key`
+hashing, DAG resolution (§1.3), property-based testing (§7.2), the optional formal tier
+(§7.2), and toolchain-pinning stability (`toolchain_hash`, §2).
+**Findings:** Rust wins on determinism-by-construction (no ambient globals), single
+static-binary distribution (simplest possible `toolchain_hash`), raw throughput, and has
+the only mature formal-verification story of the three (Kani model-checks real Rust,
+directly serving the "provable" ambition in the original request). Python's `hypothesis`
+is the strongest property-based testing tool available in any of the three ecosystems
+(generation + shrinking).
+**Decision:** The array-test engine — content addressing (T1), DAG resolver (T2),
+hermetic runner (T3), ledger/Merkle root (T4), frontier selection (T5), judge gate (T9),
+repair micro-loop (T10), CLI (T11) — is built in **Rust**. Property-based tests (T7) run
+via **Python + Hypothesis**, invoked as a subprocess that emits TAP across the same
+evidence boundary (D6) any other language's test runner would use. riteway is demoted
+from "the toolchain" (D6's original lean) to one optional TAP-emitting adapter, usable if
+and when a unit is written in JS — never a dependency of the core engine.
+**Consequence:** Resolves R-d (s0 research report; s1 research report R-d). `code_hash`
+inputs, hermeticity enforcement, and the CLI are all Rust from T1 onward; s1's build-plan
+and test-plan (written before this decision) are amended in place with a visible note
+rather than silently rewritten.
+**Alternatives rejected:** Pure Rust (proptest/quickcheck are weaker than Hypothesis for
+this specific job — small but real ergonomics cost); pure Python (weaker hermeticity
+guarantees, slower at scale, much less mature formal-tier tooling than Kani).

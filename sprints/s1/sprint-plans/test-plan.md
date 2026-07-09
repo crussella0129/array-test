@@ -22,10 +22,13 @@ plan (s0 only had acceptance checks on docs).
   `dag.json` (ordering included).
 
 ## Authoring note
-Per D6, these tests should themselves be written in riteway's
-`given/should/actual/expected` shape once T6 lands — for s1, plain assertions are
-acceptable since T6 isn't built yet, but naming should already follow the given/should
-convention so migrating to riteway later is a rename, not a rewrite.
+> **Amended:** originally said tests would migrate to riteway; per **D8**, the engine is
+> Rust, so the target is a native Rust test harness, not riteway. Riteway remains an
+> optional adapter for JS units only.
+
+Per D6, these tests follow the `given/should/actual/expected` naming convention (Rust
+`#[test]` functions with `given`/`should` in comments or test names) so that once T6's
+native TAP emission lands, migrating is a mechanical rename, not a rewrite.
 
 ## Exit condition
 All AC1–AC8 green → `R1` (the array's first real regression round) certified; root
