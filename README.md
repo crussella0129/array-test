@@ -18,12 +18,25 @@ protocol (Research → Plan → Build → Test → Loop; the filesystem is the s
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the deterministic/provable design.
 
 ## Sprint-loop state
-- `decisions.md` — architectural decision log (D1–D5).
+- `decisions.md` — architectural decision log (D1–D7).
 - `confidence.txt` — sprint-loop confidence throttle.
 - `agent-tasks/` — active backlog + completion log.
-- `sprints/s0/` — current sprint (design): research report + locked build/test plans.
+- `sprints/s0/` — design sprint (closed, green): research report + locked build/test plans.
+- `sprints/s1/` — current sprint: research (riteway investigation, two-phase confirmation
+  gate) + locked build/test plans for the content-addressing and DAG substrate.
+
+## Notable design points
+- Regression is a **Merkle DAG of confirmations**: content-addressed cells, frontier-only
+  re-runs, a hash-chained ledger with a verifiable green root (`docs/ARCHITECTURE.md`).
+- Confirmation is a **two-phase gate**: a deterministic, reproducible test phase (Phase D,
+  what the Merkle root certifies) *and* an independent judge-agent review (Phase J, audited
+  but not rooted). A judge rejection triggers a repair micro-loop scoped to the single unit,
+  not the whole sprint (`docs/ARCHITECTURE.md` §4).
+- Test authoring and evidence format follow
+  [riteway](https://github.com/crussella0129/riteway)'s `given/should/actual/expected` +
+  TAP conventions.
 
 ## Status
-**Sprint s0 (design)** complete: schema analyzed, architecture specified, state machine
-scaffolded. **Sprint s1** builds the substrate — content addressing + schemas (T1) and the
-integration DAG resolver (T2). See `agent-tasks/agent-tasks.md`.
+**Sprint s0 (design)** closed green. **Sprint s1** in progress: research + plan locked for
+T1 (content addressing + schemas) and T2 (integration DAG resolver) — the substrate every
+later cell key depends on. See `agent-tasks/agent-tasks.md`.

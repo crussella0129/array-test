@@ -33,3 +33,37 @@ for critical units, recording the guarantee level per cell.
 **Context:** Align the schema's R1…Rn with the sprint-loops protocol.
 **Decision:** Each sprint's Test phase runs exactly one round; its green root is the gate
 the next sprint reads (the schema's "loop back to current sprint").
+
+## D6 — Adopt riteway's given/should/actual/expected + TAP as evidence (s1 research)
+**Context:** Researched `crussella0129/riteway`, an AI-native testing framework built
+around RITE (Readable, Isolated, Thorough, Explicit) and the "5 questions every unit test
+must answer." Its assertion shape already forces tests to answer exactly what
+`ARCHITECTURE.md §7` needs, and its output (TAP — Test Anything Protocol) is a
+standardized, tool-compatible evidence format.
+**Decision:** `tests/` are authored in riteway's `given/should/actual/expected` shape;
+TAP output is hashed into `evidence_hash` (§1.2, §2) instead of a bespoke format. This
+leans the implementation toolchain toward Node/JS, settling open question R-d from the s0
+research report.
+**Consequence:** No evidence format to invent or maintain; test authoring is
+agent-legible by construction.
+
+## D7 — Two-phase confirmation gate: deterministic AND judged, with a repair micro-loop (s1 research)
+**Context:** Passing tests (Phase D) proves code doesn't crash and satisfies the
+assertions someone wrote — it does not prove the code matches intent. `riteway ai`'s
+judge-agent + N-run + threshold model checks that. User decision: these should not be two
+independently-recorded tiers but a gate **in series** — `confirmed = det_status PASS AND
+judge.rating >= threshold` — and a judge failure should trigger a scoped repair loop, not
+a sprint-wide failure.
+**Decision:** Add Phase J (judged) after Phase D (deterministic) in `ARCHITECTURE.md §4`.
+Judge verdicts are recorded in their own hash-chained ledger (`judgments.ndjson`,
+§7.3/§8) but are explicitly **excluded** from the Merkle root that backs the provability
+claim (§7.1) — the root stays strictly reproducible; the judge layer is audited but not
+"proved." A Phase-J failure spawns a Plan→Build→Test micro-loop scoped to the single unit
+(§4.3), escalating to a sprint-level `failure-report.md` only if it exhausts a retry
+budget.
+**Consequence:** "Provable" stays honest (never let a statistical opinion masquerade as a
+reproducible proof) while still gating on semantic/spec-faithfulness, not just
+pass/fail. Fix cost for a rejected unit is bounded to that unit, not the whole sprint.
+**Alternatives rejected:** Recording the judge tier as an independent, non-gating
+annotation (weaker — a spec-unfaithful unit could still ship); folding the judge rating
+into the Merkle root (would break reproducibility of the root itself).
