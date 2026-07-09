@@ -27,8 +27,15 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
 - `confidence.txt` — sprint-loop confidence throttle.
 - `agent-tasks/` — active backlog + completion log.
 - `sprints/s0/` — design sprint (closed, green): research report + locked build/test plans.
-- `sprints/s1/` — current sprint: research (riteway investigation, two-phase confirmation
-  gate) + locked build/test plans for the content-addressing and DAG substrate.
+- `sprints/s1/` — closed, green: research (riteway investigation, two-phase confirmation
+  gate, toolchain lock) + T1/T2 built and tested.
+
+## Building
+```
+cargo build
+cargo test      # AC1-AC8 (sprints/s1/sprint-plans/test-plan.md)
+cargo clippy --all-targets
+```
 
 ## Notable design points
 - Regression is a **Merkle DAG of confirmations**: content-addressed cells, frontier-only
@@ -42,6 +49,9 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
   TAP conventions.
 
 ## Status
-**Sprint s0 (design)** closed green. **Sprint s1** in progress: research + plan locked for
-T1 (content addressing + schemas) and T2 (integration DAG resolver) — the substrate every
-later cell key depends on. See `agent-tasks/agent-tasks.md`.
+**Sprint s0 (design)** and **Sprint s1 (substrate)** both closed green: `code_hash`/
+`cell_key` content addressing, manifest/contract schemas, and the integration DAG
+resolver (forward closure + reverse impact closure) are implemented in Rust and tested
+(`src/hash.rs`, `src/manifest.rs`, `src/contract.rs`, `src/dag.rs`). Next up: T3 (hermetic
+cell runner) + T4 (confirmation ledger / Merkle root) — the first sprint that can actually
+run an `R_k`. See `agent-tasks/agent-tasks.md`.

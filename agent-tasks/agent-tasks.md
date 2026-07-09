@@ -7,14 +7,6 @@ Persistent across sprints (sprint-loops convention). Ordered by build dependency
 property tier (T7); TAP as the language-agnostic evidence contract (T6) — riteway is an
 optional adapter for JS units, not a dependency of the core.
 
-## Foundation (Sprint s1)
-- [ ] **T1 — Content addressing & schemas.** [Rust] Define `manifest.toml` +
-  `contract.toml` schemas (`serde` + TOML); implement `code_hash = H(src ‖ contract)` and
-  `cell_key` (§2) via `blake3`. Deterministic, stable, documented.
-- [ ] **T2 — Integration DAG resolver.** [Rust, `petgraph`] Parse `deps`, build
-  `dag.json`, detect cycles, expose forward (closure / "down") and reverse (impact /
-  "backwards") traversals.
-
 ## Engine (s2+)
 - [ ] **T3 — Hermetic cell runner.** [Rust] Execute one `(target, scope)` cell under
   frozen clock / pinned seed / no-I/O; emit `evidence_hash`. Include determinism
