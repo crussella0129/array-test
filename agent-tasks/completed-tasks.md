@@ -18,3 +18,16 @@ Append-only completion log (sprint-loops convention).
   `dag.json` serialization. AC5-AC8 green.
 - [x] **Toolchain lock (D8).** Rust core + Python/Hypothesis property tier, resolving
   R-d.
+
+## Sprint s2
+- [x] **Testing-practice survey.** 10 topics mapped to the architecture with verdicts
+  (D10); yielded T12 (frontier-scoped mutation testing), T13 (fuzz tier), and spec
+  clauses for T3 (quarantine visibility, resource envelopes, coverage-as-metadata).
+- [x] **F1 — Domain-separated hashing (D9).** Frozen `array-test/v1/...` derive_key
+  contexts + 0x00/0x01 leaf/node role prefixes; fixed s1's hasher whose docs claimed
+  separation it didn't implement.
+- [x] **F2/F3/F4 — Filesystem determinism.** UTF-8 `/` path normalization, string sort,
+  symlink + non-UTF-8 rejection, typed `CodeHashError`.
+- [x] **F5 — Manifest load-time validation.** Empty id / self-dep / duplicate deps.
+- [x] **F6 — `Dag::topo_order()`.** Deterministic deps-before-dependents order.
+- [x] **F7 — Dependency bumps.** petgraph 0.8, thiserror 2, toml 1.

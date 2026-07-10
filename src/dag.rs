@@ -90,6 +90,22 @@ impl Dag {
         out
     }
 
+    /// Deterministic topological order, dependencies before dependents — the execution
+    /// order for a regression round (ARCHITECTURE.md §3 step 4) and the canonical "in
+    /// DAG order" for `cell_key` dep hashing (§2). Determinism comes from node insertion
+    /// order being sorted-by-id in [`Dag::build`]; the same units always produce the
+    /// same order.
+    pub fn topo_order(&self) -> Vec<String> {
+        let sorted = toposort(&self.graph, None)
+            .expect("Dag::build rejects cycles, so toposort cannot fail");
+        // Edges point unit -> dep, so toposort yields dependents first; reverse it.
+        sorted
+            .into_iter()
+            .rev()
+            .map(|idx| self.graph[idx].clone())
+            .collect()
+    }
+
     /// Deterministic serialization: sorted unit ids, sorted deps lists (`dag.json`,
     /// ARCHITECTURE.md §8).
     pub fn to_json(&self) -> serde_json::Value {

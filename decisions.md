@@ -95,3 +95,43 @@ rather than silently rewritten.
 **Alternatives rejected:** Pure Rust (proptest/quickcheck are weaker than Hypothesis for
 this specific job — small but real ergonomics cost); pure Python (weaker hermeticity
 guarantees, slower at scale, much less mature formal-tier tooling than Kani).
+
+## D9 — Domain-separated hashing with frozen v1 contexts; re-key precedent (s2)
+**Context:** s2 code review (research report F1–F4) found the s1 hasher claimed domain
+separation in its docs but implemented none, plus three filesystem-determinism holes
+(lossy non-UTF-8 path conversion, platform-dependent separators/sort order, silently
+followed symlinks). The provability claim (§7.1) rests on these keys being unambiguous
+by construction.
+**Decision:** Every hash derives under a named BLAKE3 `derive_key` context
+(`array-test/v1/...`), with RFC 6962-style role prefixes (`0x00` leaf / `0x01` node) so
+leaves and interior nodes can never collide even under a shared context. Paths are
+normalized to `/`-joined UTF-8, sorted as strings; non-UTF-8 names and symlinks are
+rejected loudly. Contexts are **frozen**: once a ledger root commits to v1 hashes,
+changing any context or structural rule is a formal re-key event (new version namespace,
+full re-confirmation).
+**Consequence:** All hash values changed. Safe exactly now — no ledger exists yet (T4
+unbuilt), so nothing committed refers to the old values. Precedent recorded: hash
+semantics changes ride ahead of the first ledger commit, or they pay for a full re-key.
+**Alternatives rejected:** Role-disjoint context table alone (a convention, not a
+construction — one future refactor away from silently breaking); post-hoc migration
+tooling (buys nothing while the ledger is unbuilt).
+
+## D10 — Testing-practice survey adoption map (s2)
+**Context:** Survey of established testing practice (s2 research report §2), each item
+mapped against the architecture.
+**Decision:**
+- *Adopted now:* Merkle domain separation (→ D9); cross-platform filesystem determinism
+  (→ D9).
+- *Adopted later:* frontier-scoped **mutation testing** (backlog T12 — content-addressing
+  makes mutation incremental: only dirty units re-mutate, scores memoized by `code_hash`);
+  **fuzz tier** (backlog T13 — corpus as content-addressed fixtures); **quarantine as
+  visible ledger state** and **per-scope resource envelopes** (folded into T3's spec);
+  coverage as evidence *metadata* (T3 flag, explicitly never a gate — Goodhart).
+- *Documented conventions:* metamorphic relations in `contract.toml [properties]` when no
+  oracle exists (also an input to Phase-J judge prompts, R-e); golden/snapshot updates
+  route through Phase J as semantic events, never auto-accepted.
+- *Validated as already core:* frontier selection (= industry content-addressed action
+  caching à la Bazel/Buck2/Nix), scope ladder (= Google test-size taxonomy), determinism
+  meta-check (= flaky-test literature's causes, pinned or banned).
+**Consequence:** The design gained two backlog tiers and several spec clauses without any
+architectural change — the survey confirmed the array's shape and sharpened its edges.

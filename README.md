@@ -29,6 +29,9 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
 - `sprints/s0/` — design sprint (closed, green): research report + locked build/test plans.
 - `sprints/s1/` — closed, green: research (riteway investigation, two-phase confirmation
   gate, toolchain lock) + T1/T2 built and tested.
+- `sprints/s2/` — closed, green: testing-practice survey (10 topics, adoption map in D10)
+  + refactor: domain-separated hashing (D9), filesystem determinism, manifest validation,
+  `topo_order()`.
 
 ## Building
 ```
@@ -49,9 +52,12 @@ cargo clippy --all-targets
   TAP conventions.
 
 ## Status
-**Sprint s0 (design)** and **Sprint s1 (substrate)** both closed green: `code_hash`/
-`cell_key` content addressing, manifest/contract schemas, and the integration DAG
-resolver (forward closure + reverse impact closure) are implemented in Rust and tested
-(`src/hash.rs`, `src/manifest.rs`, `src/contract.rs`, `src/dag.rs`). Next up: T3 (hermetic
-cell runner) + T4 (confirmation ledger / Merkle root) — the first sprint that can actually
-run an `R_k`. See `agent-tasks/agent-tasks.md`.
+Sprints **s0 (design)**, **s1 (substrate)**, and **s2 (survey + hardening refactor)** all
+closed green. Implemented and tested (`src/hash.rs`, `src/manifest.rs`, `src/contract.rs`,
+`src/dag.rs`): domain-separated `code_hash`/`cell_key` content addressing (frozen
+`array-test/v1/...` contexts, RFC 6962-style leaf/node prefixes), cross-platform
+deterministic file hashing, validated manifest/contract schemas, and the integration DAG
+resolver (forward closure, reverse impact closure, deterministic `topo_order()`). Next up:
+T3 (hermetic cell runner) + T4 (confirmation ledger / Merkle root) — the first sprint that
+can actually run an `R_k`, at which point the v1 hash contexts freeze for good. See
+`agent-tasks/agent-tasks.md`.

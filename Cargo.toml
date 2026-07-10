@@ -8,9 +8,9 @@ description = "A deterministic, code-based, provable regression system for agent
 blake3 = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.8"
-petgraph = "0.6"
-thiserror = "1"
+toml = "1"
+petgraph = "0.8"
+thiserror = "2"
 
 [dev-dependencies]
 tempfile = "3"

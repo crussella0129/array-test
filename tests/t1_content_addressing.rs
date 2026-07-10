@@ -164,6 +164,98 @@ fn given_no_inputs_change_should_reproduce_identical_cell_key() {
     assert_eq!(compute_cell_key(&a), compute_cell_key(&b));
 }
 
+#[cfg(unix)]
+#[test]
+fn given_a_non_utf8_filename_in_src_should_be_rejected() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let unit = make_unit(&[("ok.rs", "fn f() {}")], "[io]\ninput=\"Bytes\"\n");
+    let bad_name = OsStr::from_bytes(b"bad-\xff-name.rs");
+    fs::write(unit.path().join("src").join(bad_name), "fn g() {}").unwrap();
+
+    let result = compute_code_hash(unit.path());
+
+    assert!(matches!(
+        result,
+        Err(array_test::hash::CodeHashError::NonUtf8Path { .. })
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn given_a_symlink_in_src_should_be_rejected() {
+    let unit = make_unit(&[("ok.rs", "fn f() {}")], "[io]\ninput=\"Bytes\"\n");
+    std::os::unix::fs::symlink("/etc/hostname", unit.path().join("src").join("sneaky.rs"))
+        .unwrap();
+
+    let result = compute_code_hash(unit.path());
+
+    assert!(matches!(
+        result,
+        Err(array_test::hash::CodeHashError::Symlink { .. })
+    ));
+}
+
+#[test]
+fn given_the_same_nested_tree_should_hash_identically_and_a_moved_file_differently() {
+    let a = make_unit(
+        &[("mod/inner.rs", "fn f() {}"), ("lib.rs", "mod m;")],
+        "[io]\ninput=\"Bytes\"\n",
+    );
+    let b = make_unit(
+        &[("mod/inner.rs", "fn f() {}"), ("lib.rs", "mod m;")],
+        "[io]\ninput=\"Bytes\"\n",
+    );
+    // Same bytes, but inner.rs moved to the root: normalized path is part of the hash.
+    let c = make_unit(
+        &[("inner.rs", "fn f() {}"), ("lib.rs", "mod m;")],
+        "[io]\ninput=\"Bytes\"\n",
+    );
+
+    let ha = compute_code_hash(a.path()).unwrap();
+    let hb = compute_code_hash(b.path()).unwrap();
+    let hc = compute_code_hash(c.path()).unwrap();
+
+    assert_eq!(ha, hb);
+    assert_ne!(ha, hc);
+}
+
+#[test]
+fn given_a_manifest_with_a_self_dependency_should_be_rejected() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("manifest.toml");
+    fs::write(
+        &path,
+        "id = \"u.a\"\nsprint = 1\nversion = \"0.1.0\"\ndeps = [\"u.a\"]\n",
+    )
+    .unwrap();
+
+    assert!(load_manifest(&path).is_err());
+}
+
+#[test]
+fn given_a_manifest_with_duplicate_deps_should_be_rejected() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("manifest.toml");
+    fs::write(
+        &path,
+        "id = \"u.a\"\nsprint = 1\nversion = \"0.1.0\"\ndeps = [\"u.b\", \"u.b\"]\n",
+    )
+    .unwrap();
+
+    assert!(load_manifest(&path).is_err());
+}
+
+#[test]
+fn given_a_manifest_with_an_empty_id_should_be_rejected() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("manifest.toml");
+    fs::write(&path, "id = \"  \"\nsprint = 1\nversion = \"0.1.0\"\n").unwrap();
+
+    assert!(load_manifest(&path).is_err());
+}
+
 #[test]
 fn given_a_manifest_missing_a_required_field_should_be_rejected() {
     let dir = tempdir().unwrap();

@@ -7,10 +7,13 @@ Persistent across sprints (sprint-loops convention). Ordered by build dependency
 property tier (T7); TAP as the language-agnostic evidence contract (T6) — riteway is an
 optional adapter for JS units, not a dependency of the core.
 
-## Engine (s2+)
+## Engine (s3+)
 - [ ] **T3 — Hermetic cell runner.** [Rust] Execute one `(target, scope)` cell under
   frozen clock / pinned seed / no-I/O; emit `evidence_hash`. Include determinism
-  meta-check (run twice, hashes must match) → quarantine on mismatch.
+  meta-check (run twice, hashes must match) → quarantine on mismatch. Per D10:
+  quarantine is visible ledger state with a recorded reason (never a silent skip);
+  each scope enforces a resource envelope (wall-clock/memory caps); optional coverage
+  summary recorded as evidence metadata, never a gate.
 - [ ] **T4 — Confirmation ledger.** [Rust] Append-only `confirmations.ndjson`,
   hash-chained; Merkle root over `{cell_key → det_status}`; `roots/R<k>.json`.
 - [ ] **T5 — Frontier selection + cache.** [Rust] Diff `code_hash`es, compute impact
@@ -28,6 +31,13 @@ optional adapter for JS units, not a dependency of the core.
   (pre/post/invariants): [Rust]. Record guarantee level per cell.
 - [ ] **T8 — Optional formal tier.** [Rust + Kani] Model-check designated critical-unit
   invariants; attach `proof_hash`.
+- [ ] **T12 — Frontier-scoped mutation testing.** [Rust + cargo-mutants] Mutation score
+  as guarantee-level metadata per confirmation; only dirty units re-mutate — scores are
+  memoized by `code_hash`, the same economics as the regression frontier. (D10;
+  s2 research report §2.5.)
+- [ ] **T13 — Fuzz tier (opt-in).** [Rust + cargo-fuzz] Coverage-guided fuzzing per
+  unit; corpus is a content-addressed fixture set, so corpus growth re-keys cells
+  naturally. (D10; s2 research report §2.6.)
 
 ## Judged gate (s2+)
 - [ ] **T9 — Phase J: judge gate.** [Rust orchestrator, model-agnostic judge] Independent

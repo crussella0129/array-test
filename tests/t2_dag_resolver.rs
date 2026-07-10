@@ -108,6 +108,30 @@ fn given_an_unknown_unit_id_closures_should_be_empty_not_erroring() {
 }
 
 #[test]
+fn given_the_fixture_graph_topo_order_should_place_deps_before_dependents() {
+    let units = fixture_units();
+    let dag = Dag::build(refs(&units)).unwrap();
+
+    let order = dag.topo_order();
+    let pos = |id: &str| order.iter().position(|u| u == id).unwrap();
+
+    // Edges: b->a, c->b, d->a, d->c. Deps must come first.
+    assert!(pos("a") < pos("b"));
+    assert!(pos("a") < pos("d"));
+    assert!(pos("b") < pos("c"));
+    assert!(pos("c") < pos("d"));
+}
+
+#[test]
+fn given_the_same_units_topo_order_should_be_identical_across_builds() {
+    let units = fixture_units();
+    let dag1 = Dag::build(refs(&units)).unwrap();
+    let dag2 = Dag::build(refs(&units)).unwrap();
+
+    assert_eq!(dag1.topo_order(), dag2.topo_order());
+}
+
+#[test]
 fn given_the_same_units_dag_json_should_serialize_deterministically() {
     let units = fixture_units();
     let dag1 = Dag::build(refs(&units)).unwrap();

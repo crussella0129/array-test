@@ -57,6 +57,11 @@ roundtrip  = "detokenize(tokenize(x)) == normalize(x)"
 monotonic  = "len(tokenize(x)) <= len(x)"
 ```
 
+When a unit has no exact oracle (common for agent-generated code whose spec is prose),
+prefer **metamorphic relations** in `[properties]` — relations between outputs rather
+than exact outputs, e.g. `tokenize(a ++ b)` versus `tokenize(a)`/`tokenize(b)` (D10).
+A Phase-J judge reviewing an oracle-less contract should ask for them.
+
 **Authoring convention:** individual test cases (`tests/`) are written in a
 `given / should / actual / expected` shape — the convention
 [riteway](https://github.com/crussella0129/riteway) organizes its API around — e.g. in
@@ -123,6 +128,14 @@ cell_key = H(
   ‖ toolchain_hash                              # compiler/runtime/lockfile versions
 )
 ```
+
+All hashes are **domain-separated** (D9): each derives under a frozen, versioned BLAKE3
+`derive_key` context (`array-test/v1/code-hash`, `array-test/v1/cell-key`, …) with
+RFC 6962-style leaf/node role prefixes, so no hash produced for one purpose can ever be
+presented as another (the Merkle second-preimage class of confusion). Paths inside
+`code_hash` are normalized to `/`-joined UTF-8 and sorted as strings; non-UTF-8 names and
+symlinks are rejected — a key must mean the same bytes on every platform, or §7's claims
+quietly become platform-scoped.
 
 A **confirmation** is the recorded result for a `cell_key`:
 
@@ -209,6 +222,10 @@ auditable* even though *re-running the judge* isn't guaranteed to reproduce it b
 This is the honest boundary: Phase D gives reproducible proof, Phase J gives an audited,
 threshold-smoothed expert opinion.
 
+Phase J also owns **golden updates** (D10): when a test's expected output changes, the
+new golden routes through the judge as a semantic event ("the promise changed — is that
+right?"), never an auto-accept. This is the standing defense against golden rot.
+
 ### 4.3 Judge failure → the repair micro-loop
 If Phase D passes but Phase J fails, that is **not** a sprint-level failure. It triggers a
 micro-loop scoped to exactly this cell's unit:
@@ -261,7 +278,13 @@ A cell is only cacheable if it's reproducible. Required:
 - **Single-writer ledger** — confirmations appended in topological order.
 
 Determinism check (meta-test): run any cell twice; `evidence_hash` must match. A cell that
-fails this is *quarantined* (cannot enter the cache) until made hermetic.
+fails this is *quarantined* (cannot enter the cache) until made hermetic. Quarantine is
+**visible ledger state** — a quarantined cell is a red mark with a recorded reason, never
+a silent skip; quarantine must not become the place failures go to be forgotten (D10).
+
+Additionally (D10), each scope in the ladder carries a **resource envelope**
+(wall-clock/memory caps enforced by the runner, T3): a `UNIT` cell that outgrows its
+envelope is an early signal it has quietly become an integration test.
 
 ---
 
