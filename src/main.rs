@@ -13,9 +13,12 @@ array-test — deterministic, provable regression rounds
 USAGE:
   array-test run --units <dir> --state <dir> [--round N] [--seed N] [--toolchain-hash blake3:HEX]
   array-test verify --state <dir>
+  array-test tap -- <command> [args...]
 
 run     Execute one regression round. Exit 0 iff the round is green (all cells Pass).
 verify  Re-verify the ledger chain and the latest round's root. Exit 0 iff intact.
+tap     Run a libtest-style command and emit deterministic, timing-free TAP on stdout
+        (the evidence adapter for wrapping e.g. `cargo test` inside a cell).
 ";
 
 fn arg_value(args: &[String], flag: &str) -> Option<String> {
@@ -35,6 +38,7 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("run") => cmd_run(&args[1..]),
         Some("verify") => cmd_verify(&args[1..]),
+        Some("tap") => cmd_tap(&args[1..]),
         Some("--help") | Some("-h") | Some("help") => {
             println!("{USAGE}");
             ExitCode::SUCCESS
@@ -100,6 +104,27 @@ fn cmd_run(args: &[String]) -> ExitCode {
                 ExitCode::SUCCESS
             } else {
                 println!("NOT GREEN");
+                ExitCode::FAILURE
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn cmd_tap(args: &[String]) -> ExitCode {
+    let command: Vec<String> = match args.iter().position(|a| a == "--") {
+        Some(i) => args[i + 1..].to_vec(),
+        None => return fail("tap requires -- followed by the inner command"),
+    };
+    match array_test::tap::run_wrapper(&command) {
+        Ok((tap, success)) => {
+            print!("{tap}");
+            if success {
+                ExitCode::SUCCESS
+            } else {
                 ExitCode::FAILURE
             }
         }

@@ -186,3 +186,22 @@ for cache validity.
 **Gaps recorded:** R-h — toolchain hash defaults to an explicit "unpinned" sentinel
 until a real pinning story exists; T15 — true self-hosting blocked on TAP-clean output
 (cargo prints timings, which the meta-check would correctly quarantine).
+
+## D14 — Evidence determinism is produced at the source, never by normalization (s5)
+**Context:** Self-hosting requires cells wrapping libtest/cargo output, which contains
+wall-clock timings — the meta-check correctly quarantines raw wrapping.
+**Decision:** The fix is the `array-test tap` adapter: the *cell's command* emits
+minimal, sorted, timing-free TAP; the runner keeps hashing exactly what the cell
+emitted, byte for byte. The adapter is part of the test definition (inside
+`test_def_hash`), not the trust boundary. Normalizing/stripping evidence at the hasher
+is rejected on principle: it makes the hash stop committing to what the cell emitted,
+and every normalization rule is a new place for a flake to hide. Corollary encoded in
+the adapter: a nonzero inner exit with no parsed failure synthesizes a `not ok` —
+silence never reads as success.
+**Consequence:** Self-hosting works (T15 landed: array-test certifies its own T2 suite
+green, reuses it on the next round) and the meta-check keeps full power — if the
+adapter itself ever emits instability, the cell quarantines, which is correct.
+**Note:** the self-host cell runs the prebuilt libtest binary directly rather than
+`cargo test` — cargo holds the build-dir lock for its whole session (inner cargo would
+deadlock the outer), and the direct binary needs no PATH/HOME at all: strictly more
+hermetic. Contexts remain formally frozen-on-first-durable-ledger (s5 research §5).

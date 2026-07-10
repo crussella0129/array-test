@@ -36,6 +36,8 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
   v1 isolation level per D12), hash-chained confirmation ledger + array root (T4).
 - `sprints/s4/` — closed, green: round orchestrator + cache (T5, semantics in D13) and
   the standalone CLI (T11) — the first real `R_k`.
+- `sprints/s5/` — closed, green: TAP evidence adapter (T6, principle in D14) and the
+  self-hosting milestone (T15): array-test certifies its own test suite.
 
 ## Building & running
 ```
@@ -48,6 +50,10 @@ array-test run --units <units-dir> --state <state-dir> [--seed N] [--toolchain-h
 
 # Independently re-verify the ledger chain and latest round certificate:
 array-test verify --state <state-dir>
+
+# Wrap a libtest-style command in deterministic, timing-free TAP (the evidence
+# adapter that makes wrapping `cargo test`-built binaries cache-stable):
+array-test tap -- <command> [args...]
 ```
 
 ## Notable design points
@@ -71,13 +77,16 @@ evidence. Anyone holding the ledger file can re-verify the chain and root with z
 in the runner.
 
 ## Status
-Sprints **s0–s4** all closed green — 68 tests. The system now runs real regression
-rounds end-to-end: domain-separated `code_hash`/`cell_key` content addressing (frozen
-`array-test/v1/...` contexts), validated manifest/contract schemas, the integration DAG
-resolver, the hermetic cell runner (cleared env + seed, evidence hashing, wall-clock
-envelope with process-group kill, run-twice determinism meta-check → visible
-quarantine), the hash-chained confirmation ledger with per-round root certificates, the
-cache-aware round orchestrator (unchanged round ⇒ zero executions and a byte-identical
-root; a changed dependency ⇒ exactly its closure re-runs), and the `array-test run` /
-`verify` CLI. Next up: T6 TAP evidence adapter → T15 self-hosting (array-test certifying
-its own tests). See `agent-tasks/agent-tasks.md`.
+Sprints **s0–s5** all closed green — 77 tests, and the system is **self-hosting**:
+array-test runs its own test suite as a cell (through the `tap` evidence adapter),
+passes its own determinism meta-check, and certifies a green root over itself — then
+reuses that confirmation on the next round. Under the hood: domain-separated
+`code_hash`/`cell_key` content addressing (frozen `array-test/v1/...` contexts),
+validated manifest/contract schemas, the integration DAG resolver, the hermetic cell
+runner (cleared env + seed, evidence hashing, wall-clock envelope with process-group
+kill, run-twice determinism meta-check → visible quarantine), the hash-chained
+confirmation ledger with per-round root certificates, the cache-aware round
+orchestrator (unchanged round ⇒ zero executions and a byte-identical root; a changed
+dependency ⇒ exactly its closure re-runs), and the `run` / `verify` / `tap` CLI. Next
+up: T14 (sprint-loops Test-phase adapter), then the scope ladder, sandbox, and
+guarantee tiers. See `agent-tasks/agent-tasks.md`.

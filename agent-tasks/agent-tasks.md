@@ -16,16 +16,11 @@ optional adapter for JS units, not a dependency of the core.
 - [ ] **T5b — Scope ladder.** [Rust] Generalize v1's CLOSURE-only cells (D13.1) to the
   full UNIT/DIRECT/CLOSURE/E2E ladder with per-scope resource envelopes and fail-fast
   ordering (§1.4, §5).
-- [ ] **T15 — Self-hosting.** array-test running its own test suite as cells and
-  certifying its own root. Blocked on TAP-clean output (T6): cargo's timing lines are
-  nondeterministic and would be correctly quarantined; the fix is clean evidence, not
-  looser hashing (D13 gaps).
+- [ ] **T15b — Full self-hosting workspace.** Extend the T15 milestone (one suite,
+  landed s5) to a committed `selfhost/` workspace covering every test suite as units
+  with real deps, producing the first durable ledger — which formally freezes the v1
+  hash contexts (D9, s5 research §5).
 
-## Evidence (s2+)
-- [ ] **T6 — TAP evidence adapter.** [Rust] Native Rust test harness emits TAP directly;
-  hash into `evidence_hash`. riteway's `given/should/actual/expected` shape remains
-  available as an optional adapter for JS units. (ARCHITECTURE.md §1.2, §10.6;
-  decisions.md D6, D8.)
 
 ## Guarantees (s2+)
 - [ ] **T7 — Property + contract tiers.** Property tier: [Python + `hypothesis`],

@@ -8,3 +8,4 @@ pub mod ledger;
 pub mod manifest;
 pub mod round;
 pub mod runner;
+pub mod tap;

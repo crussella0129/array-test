@@ -53,3 +53,13 @@ Append-only completion log (sprint-loops convention).
 - [x] **T11 — CLI.** [Rust] `src/main.rs`: `array-test run` (exit 0 iff green) and
   `array-test verify` (chain + latest-root integrity, catches tampering). Hand-rolled
   args; consumer-agnostic per D11.
+
+## Sprint s5
+- [x] **T6 — TAP evidence adapter (D14).** [Rust] `src/tap.rs` + `array-test tap -- <cmd>`:
+  libtest output → minimal sorted timing-free TAP 13; ignored → SKIP; silent nonzero
+  exits synthesize a `not ok`. Determinism produced at the source — evidence hashing
+  stays byte-exact.
+- [x] **T15 — Self-hosting milestone.** array-test runs its own t2_dag_resolver suite
+  as a cell (prebuilt libtest binary through the tap adapter), passes the meta-check
+  un-quarantined, certifies a green root over itself, survives `verify`, and reuses the
+  confirmation on round 2 with an identical root. Full-workspace version → T15b.
