@@ -7,13 +7,19 @@ Persistent across sprints (sprint-loops convention). Ordered by build dependency
 property tier (T7); TAP as the language-agnostic evidence contract (T6) — riteway is an
 optional adapter for JS units, not a dependency of the core.
 
-## Engine (s4+)
+## Engine (s5+)
 - [ ] **T3b — Full sandbox.** [Rust] Complete the D12/R-g gap: memory caps (rlimits),
   network isolation (namespaces/seccomp where available), filesystem read scoping.
   Upgrades a cell's determinism claim from "meta-checked" to "sandbox-guaranteed";
-  the ledger should record which level applied.
-- [ ] **T5 — Frontier selection + cache.** [Rust] Diff `code_hash`es, compute impact
-  closure, derive changed `cell_key`s, reuse cached ✓ for the rest. Round cost ∝ frontier.
+  the ledger should record which level applied. Also fold in R-h: a real toolchain
+  pinning story replacing the "unpinned" sentinel.
+- [ ] **T5b — Scope ladder.** [Rust] Generalize v1's CLOSURE-only cells (D13.1) to the
+  full UNIT/DIRECT/CLOSURE/E2E ladder with per-scope resource envelopes and fail-fast
+  ordering (§1.4, §5).
+- [ ] **T15 — Self-hosting.** array-test running its own test suite as cells and
+  certifying its own root. Blocked on TAP-clean output (T6): cargo's timing lines are
+  nondeterministic and would be correctly quarantined; the fix is clean evidence, not
+  looser hashing (D13 gaps).
 
 ## Evidence (s2+)
 - [ ] **T6 — TAP evidence adapter.** [Rust] Native Rust test harness emits TAP directly;
@@ -44,9 +50,7 @@ optional adapter for JS units, not a dependency of the core.
   scoped to the single unit, bounded by a retry budget; escalate to sprint-level
   `failure-report.md` on exhaustion. (ARCHITECTURE.md §4.3.)
 
-## Surface (s4+)
-- [ ] **T11 — CLI.** [Rust] `array-test run` as a pure function of the tree; the
-  standalone binary an embedder without Rust linkage uses. Consumer-agnostic per D11.
+## Surface (s5+)
 - [ ] **T14 — sprint-loops Test-phase adapter.** Shim (sprint-loops side, or an adapter
   doc here) mapping array-test's stable outputs (`roots/R<k>.json`, ledger, green gate)
   onto sprint-loops artifacts (`test-report.md`/`failure-report.md`, phase exit).

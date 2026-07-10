@@ -34,12 +34,20 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
   `topo_order()`.
 - `sprints/s3/` — closed, green: embedding contract (D11), hermetic cell runner (T3,
   v1 isolation level per D12), hash-chained confirmation ledger + array root (T4).
+- `sprints/s4/` — closed, green: round orchestrator + cache (T5, semantics in D13) and
+  the standalone CLI (T11) — the first real `R_k`.
 
-## Building
+## Building & running
 ```
 cargo build
-cargo test      # AC1-AC8 (sprints/s1/sprint-plans/test-plan.md)
+cargo test      # AC1-AC38 (per-sprint test plans under sprints/*/sprint-plans/)
 cargo clippy --all-targets
+
+# Execute a regression round over a workspace of units; exit 0 iff green:
+array-test run --units <units-dir> --state <state-dir> [--seed N] [--toolchain-hash blake3:HEX]
+
+# Independently re-verify the ledger chain and latest round certificate:
+array-test verify --state <state-dir>
 ```
 
 ## Notable design points
@@ -63,12 +71,13 @@ evidence. Anyone holding the ledger file can re-verify the chain and root with z
 in the runner.
 
 ## Status
-Sprints **s0 (design)**, **s1 (substrate)**, **s2 (survey + hardening refactor)**, and
-**s3 (runner + ledger)** all closed green — 57 tests. Implemented: domain-separated
-`code_hash`/`cell_key` content addressing (frozen `array-test/v1/...` contexts, RFC
-6962-style leaf/node prefixes), validated manifest/contract schemas, the integration DAG
-resolver (forward/impact closures, deterministic `topo_order()`), the hermetic cell
-runner (cleared env + seed, evidence hashing, wall-clock envelope with process-group
-kill, run-twice determinism meta-check → visible quarantine), and the hash-chained
-confirmation ledger with reproducible array roots. Next up: T5 (frontier selection +
-cache) and T11 (CLI) — the first self-hosted `R_k`. See `agent-tasks/agent-tasks.md`.
+Sprints **s0–s4** all closed green — 68 tests. The system now runs real regression
+rounds end-to-end: domain-separated `code_hash`/`cell_key` content addressing (frozen
+`array-test/v1/...` contexts), validated manifest/contract schemas, the integration DAG
+resolver, the hermetic cell runner (cleared env + seed, evidence hashing, wall-clock
+envelope with process-group kill, run-twice determinism meta-check → visible
+quarantine), the hash-chained confirmation ledger with per-round root certificates, the
+cache-aware round orchestrator (unchanged round ⇒ zero executions and a byte-identical
+root; a changed dependency ⇒ exactly its closure re-runs), and the `array-test run` /
+`verify` CLI. Next up: T6 TAP evidence adapter → T15 self-hosting (array-test certifying
+its own tests). See `agent-tasks/agent-tasks.md`.

@@ -37,6 +37,8 @@ pub mod domain {
     pub const DEPS_LIST: &str = "array-test/v1/deps-list";
     pub const SEED: &str = "array-test/v1/seed";
     pub const CELL_KEY: &str = "array-test/v1/cell-key";
+    pub const TEST_DEF: &str = "array-test/v1/test-def";
+    pub const FIXTURES: &str = "array-test/v1/fixtures";
     pub const EVIDENCE: &str = "array-test/v1/evidence";
     pub const LEDGER_ENTRY: &str = "array-test/v1/ledger-entry";
     pub const LEDGER_GENESIS: &str = "array-test/v1/ledger-genesis";
@@ -80,6 +82,15 @@ impl Hash {
 
     pub fn as_bytes(&self) -> &[u8; HASH_LEN] {
         &self.0
+    }
+
+    /// Bare hex, no `blake3:` prefix — safe for filenames on every platform.
+    pub fn hex(&self) -> String {
+        let mut s = String::with_capacity(HASH_LEN * 2);
+        for b in &self.0 {
+            s.push_str(&format!("{:02x}", b));
+        }
+        s
     }
 }
 

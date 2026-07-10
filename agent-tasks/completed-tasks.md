@@ -43,3 +43,13 @@ Append-only completion log (sprint-loops convention).
   `DetStatus` widened to Pass/Fail/Quarantined/TimedOut (D10 visibility).
 - [x] **Embedding contract (D11).** Library-first; sprint-loops is consumer #1 via
   stable outputs, never a dependency.
+
+## Sprint s4
+- [x] **T5 — Frontier selection + cache.** [Rust] `src/round.rs`: workspace loading,
+  closure-scope cell planning in topo order, Pass/Fail-only cache, cache-aware round
+  execution, per-round root certificates, reused-flagged ledger entries (D13). The
+  frontier economics are test-proven: unchanged round → 0 executions and an identical
+  root; leaf change → 1 execution; root-dep change → full closure re-runs.
+- [x] **T11 — CLI.** [Rust] `src/main.rs`: `array-test run` (exit 0 iff green) and
+  `array-test verify` (chain + latest-root integrity, catches tampering). Hand-rolled
+  args; consumer-agnostic per D11.

@@ -53,12 +53,18 @@ pub struct LedgerEntry {
     /// Unix seconds. Inside the chain hash (history records when), outside the array
     /// root (reproducibility ignores when).
     pub ts: u64,
+    /// True when this confirmation was inherited from the cache rather than freshly
+    /// executed this round (D13). Inside the chain hash: the audit trail must say
+    /// which confirmations were inherited.
+    #[serde(default)]
+    pub reused: bool,
     pub prev: Hash,
     pub entry_hash: Hash,
 }
 
 /// Canonical bytes an entry hash covers: fixed-length fields in fixed order, no
 /// serialization-format ambiguity.
+#[allow(clippy::too_many_arguments)]
 fn canonical_bytes(
     seq: u64,
     round: u32,
@@ -66,15 +72,17 @@ fn canonical_bytes(
     det_status: DetStatus,
     evidence_hash: &Hash,
     ts: u64,
+    reused: bool,
     prev: &Hash,
 ) -> Vec<u8> {
-    let mut out = Vec::with_capacity(8 + 4 + 32 + 1 + 32 + 8 + 32);
+    let mut out = Vec::with_capacity(8 + 4 + 32 + 1 + 32 + 8 + 1 + 32);
     out.extend_from_slice(&seq.to_le_bytes());
     out.extend_from_slice(&round.to_le_bytes());
     out.extend_from_slice(cell_key.as_bytes());
     out.push(det_status.byte());
     out.extend_from_slice(evidence_hash.as_bytes());
     out.extend_from_slice(&ts.to_le_bytes());
+    out.push(reused as u8);
     out.extend_from_slice(prev.as_bytes());
     out
 }
@@ -127,7 +135,7 @@ impl Ledger {
         ))
     }
 
-    /// Append one confirmation; computes seq, prev link, and entry hash.
+    /// Append a freshly-executed confirmation; computes seq, prev link, and entry hash.
     pub fn append(
         &mut self,
         round: u32,
@@ -136,11 +144,33 @@ impl Ledger {
         evidence_hash: Hash,
         ts: u64,
     ) -> Result<LedgerEntry, LedgerError> {
+        self.append_entry(round, cell_key, det_status, evidence_hash, ts, false)
+    }
+
+    /// Append one confirmation, marking whether it was inherited from the cache (D13).
+    pub fn append_entry(
+        &mut self,
+        round: u32,
+        cell_key: Hash,
+        det_status: DetStatus,
+        evidence_hash: Hash,
+        ts: u64,
+        reused: bool,
+    ) -> Result<LedgerEntry, LedgerError> {
         let seq = self.next_seq;
         let prev = self.last_hash;
         let entry_hash = Hash::leaf(
             domain::LEDGER_ENTRY,
-            &canonical_bytes(seq, round, &cell_key, det_status, &evidence_hash, ts, &prev),
+            &canonical_bytes(
+                seq,
+                round,
+                &cell_key,
+                det_status,
+                &evidence_hash,
+                ts,
+                reused,
+                &prev,
+            ),
         );
         let entry = LedgerEntry {
             seq,
@@ -149,6 +179,7 @@ impl Ledger {
             det_status,
             evidence_hash,
             ts,
+            reused,
             prev,
             entry_hash,
         };
@@ -216,6 +247,7 @@ pub fn load_and_verify(path: &Path) -> Result<Vec<LedgerEntry>, LedgerError> {
                 entry.det_status,
                 &entry.evidence_hash,
                 entry.ts,
+                entry.reused,
                 &entry.prev,
             ),
         );

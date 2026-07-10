@@ -16,6 +16,21 @@ pub struct Manifest {
     pub version: String,
     #[serde(default)]
     pub deps: Vec<String>,
+    /// Optional test declaration. Units without one contribute code (and dep hashes)
+    /// but no cell of their own.
+    #[serde(default)]
+    pub test: Option<TestSpec>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TestSpec {
+    /// argv vector; `command[0]` is the program. No shell is implied.
+    pub command: Vec<String>,
+    /// Declared environment for the cell (D12: only declared vars reach the child).
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
+    /// Wall-clock envelope override in seconds.
+    pub timeout_secs: Option<u64>,
 }
 
 #[derive(Debug, Error)]
@@ -51,6 +66,11 @@ impl Manifest {
             }
             if !seen.insert(dep) {
                 return Err(format!("duplicate dependency '{dep}'"));
+            }
+        }
+        if let Some(test) = &self.test {
+            if test.command.is_empty() {
+                return Err("test.command must be non-empty when [test] is declared".to_string());
             }
         }
         Ok(())

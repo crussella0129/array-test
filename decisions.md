@@ -167,3 +167,22 @@ a cell's determinism claim is "meta-checked", not "sandbox-guaranteed".
 **Consequence:** Honest labeling of the guarantee level; the meta-check catches the
 nondeterminism that ambient I/O actually causes, which is the failure mode that matters
 for cache validity.
+
+## D13 — Round semantics: closure-scope cells, cache policy, per-round roots (s4)
+**Context:** Wiring T5 required locking four semantics (s4 research report §2).
+**Decision:**
+1. **v1 cells are CLOSURE-scope** — one per unit with `[test]`; the key includes the
+   transitive dep closure's `code_hash`es in topo order. The "backwards" arrow is
+   thereby *emergent*: a dependency change re-keys every transitive dependent, putting
+   exactly the impact set into the frontier with no separate impact machinery.
+2. **Cache: Pass AND Fail are reusable forever per key** (a deterministic failure is a
+   fact, not something to re-check); **Quarantined and TimedOut never enter the cache**
+   (irreproducible / host-dependent).
+3. **The round root commits to the round's planned cells only.** A whole-ledger
+   "latest per key" root would leak stale keys forever after any change. History keeps
+   everything; the certificate speaks only for now.
+4. **Reused confirmations are ledger entries too**, flagged `reused` inside the chained
+   hash — every round is self-contained in history and the inheritance is auditable.
+**Gaps recorded:** R-h — toolchain hash defaults to an explicit "unpinned" sentinel
+until a real pinning story exists; T15 — true self-hosting blocked on TAP-clean output
+(cargo prints timings, which the meta-check would correctly quarantine).
