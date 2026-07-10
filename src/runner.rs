@@ -30,6 +30,63 @@ pub struct CellSpec {
     pub seed: u64,
     /// Wall-clock envelope (D10). Breach is `TimedOut`, distinct from `Fail`.
     pub timeout: Duration,
+    /// Opt-in memory cap in megabytes, enforced as `RLIMIT_AS` in the child (T3b).
+    /// A breach surfaces as allocation failure inside the cell → `Fail`.
+    pub mem_limit_mb: Option<u64>,
+}
+
+/// The isolation level actually applied to cells in this process (D16). Probed once:
+/// if a network namespace can be created, every cell gets a fresh one (loopback only)
+/// and pre_exec fails closed; otherwise cells run with env hygiene + the meta-check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IsolationLevel {
+    EnvOnly,
+    NetIsolated,
+}
+
+#[cfg(unix)]
+fn netns_flags() -> Option<libc::c_int> {
+    static PROBE: std::sync::OnceLock<Option<libc::c_int>> = std::sync::OnceLock::new();
+    *PROBE.get_or_init(|| {
+        // Try root-style netns first, then unprivileged user+net namespaces. The probe
+        // child attempts the unshare itself; spawn failure means "can't".
+        for flags in [
+            libc::CLONE_NEWNET,
+            libc::CLONE_NEWUSER | libc::CLONE_NEWNET,
+        ] {
+            let mut cmd = Command::new("/bin/sh");
+            cmd.args(["-c", "exit 0"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            unsafe {
+                use std::os::unix::process::CommandExt;
+                cmd.pre_exec(move || {
+                    if libc::unshare(flags) == 0 {
+                        Ok(())
+                    } else {
+                        Err(std::io::Error::last_os_error())
+                    }
+                });
+            }
+            if matches!(cmd.status(), Ok(status) if status.success()) {
+                return Some(flags);
+            }
+        }
+        None
+    })
+}
+
+/// The isolation level cells in this process actually get (recorded per confirmation).
+pub fn isolation_level() -> IsolationLevel {
+    #[cfg(unix)]
+    {
+        if netns_flags().is_some() {
+            return IsolationLevel::NetIsolated;
+        }
+    }
+    IsolationLevel::EnvOnly
 }
 
 /// Fixed hygiene variables set for every cell, before declared `env` (which may
@@ -127,6 +184,31 @@ pub fn run_cell(spec: &CellSpec) -> Result<RunOutcome, RunError> {
     {
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
+
+        let mem_limit = spec.mem_limit_mb;
+        let net_flags = netns_flags();
+        unsafe {
+            cmd.pre_exec(move || {
+                if let Some(mb) = mem_limit {
+                    let bytes = mb.saturating_mul(1024 * 1024);
+                    let limit = libc::rlimit {
+                        rlim_cur: bytes,
+                        rlim_max: bytes,
+                    };
+                    if libc::setrlimit(libc::RLIMIT_AS, &limit) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
+                // Fail closed (D16): if the host can isolate, a cell that cannot be
+                // isolated does not run.
+                if let Some(flags) = net_flags {
+                    if libc::unshare(flags) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
+                Ok(())
+            });
+        }
     }
 
     let start = Instant::now();

@@ -10,7 +10,7 @@
 #![cfg(unix)]
 
 use array_test::ledger::DetStatus;
-use array_test::round::{run_round, unpinned_toolchain, CellOutcomeKind};
+use array_test::round::{run_round, CellOutcomeKind};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -65,7 +65,7 @@ fn given_our_own_t2_suite_as_a_cell_the_array_should_certify_itself_green() {
 
     // AC43 — the round executes the cell (twice, via the meta-check), does NOT
     // quarantine it, and certifies green.
-    let r1 = run_round(ws.path(), state.path(), None, 0, unpinned_toolchain()).unwrap();
+    let r1 = run_round(ws.path(), state.path(), None, 0, None).unwrap();
     let cell = &r1.cells[0];
     assert_eq!(cell.kind, CellOutcomeKind::Executed);
     assert_eq!(
@@ -90,7 +90,7 @@ fn given_our_own_t2_suite_as_a_cell_the_array_should_certify_itself_green() {
 
     // AC44b — self-hosted frontier economics: nothing changed, so round 2 reuses the
     // confirmation without re-running the suite, and the root is identical.
-    let r2 = run_round(ws.path(), state.path(), None, 0, unpinned_toolchain()).unwrap();
+    let r2 = run_round(ws.path(), state.path(), None, 0, None).unwrap();
     assert_eq!(r2.reused(), 1);
     assert_eq!(r2.executed(), 0);
     assert_eq!(r1.record.root, r2.record.root);

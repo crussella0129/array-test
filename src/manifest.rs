@@ -16,11 +16,18 @@ pub struct Manifest {
     pub version: String,
     #[serde(default)]
     pub deps: Vec<String>,
-    /// Optional test declaration. Units without one contribute code (and dep hashes)
-    /// but no cell of their own.
+    /// Legacy single test declaration — sugar for `[tests.closure]` (D15). Declaring
+    /// both is a validation error.
     #[serde(default)]
     pub test: Option<TestSpec>,
+    /// Per-scope tests: keys are `unit` | `direct` | `closure` | `e2e` (D15). A unit
+    /// with `[tests.e2e]` is thereby an entrypoint declaration (§1.4). Units without
+    /// any test contribute code (and dep hashes) but no cell of their own.
+    #[serde(default)]
+    pub tests: std::collections::BTreeMap<String, TestSpec>,
 }
+
+pub const VALID_SCOPES: &[&str] = &["unit", "direct", "closure", "e2e"];
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TestSpec {
@@ -29,8 +36,10 @@ pub struct TestSpec {
     /// Declared environment for the cell (D12: only declared vars reach the child).
     #[serde(default)]
     pub env: std::collections::BTreeMap<String, String>,
-    /// Wall-clock envelope override in seconds.
+    /// Wall-clock envelope override in seconds (per-scope defaults apply otherwise).
     pub timeout_secs: Option<u64>,
+    /// Opt-in memory cap (RLIMIT_AS) in megabytes (T3b).
+    pub mem_limit_mb: Option<u64>,
 }
 
 #[derive(Debug, Error)]
@@ -72,6 +81,22 @@ impl Manifest {
             if test.command.is_empty() {
                 return Err("test.command must be non-empty when [test] is declared".to_string());
             }
+        }
+        for (scope, spec) in &self.tests {
+            if !VALID_SCOPES.contains(&scope.as_str()) {
+                return Err(format!(
+                    "unknown test scope '{scope}' (expected one of: unit, direct, closure, e2e)"
+                ));
+            }
+            if spec.command.is_empty() {
+                return Err(format!("tests.{scope}.command must be non-empty"));
+            }
+        }
+        if self.test.is_some() && self.tests.contains_key("closure") {
+            return Err(
+                "declare either legacy [test] or [tests.closure], not both (they are the same scope)"
+                    .to_string(),
+            );
         }
         Ok(())
     }

@@ -38,6 +38,8 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
   the standalone CLI (T11) — the first real `R_k`.
 - `sprints/s5/` — closed, green: TAP evidence adapter (T6, principle in D14) and the
   self-hosting milestone (T15): array-test certifies its own test suite.
+- `sprints/s6/` — closed, green: scope ladder (T5b, D15), sandbox with recorded
+  isolation levels (T3b, D16), toolchain.lock pinning (R-h closed).
 
 ## Building & running
 ```
@@ -77,7 +79,7 @@ evidence. Anyone holding the ledger file can re-verify the chain and root with z
 in the runner.
 
 ## Status
-Sprints **s0–s5** all closed green — 77 tests, and the system is **self-hosting**:
+Sprints **s0–s6** all closed green — 90 tests, and the system is **self-hosting**:
 array-test runs its own test suite as a cell (through the `tap` evidence adapter),
 passes its own determinism meta-check, and certifies a green root over itself — then
 reuses that confirmation on the next round. Under the hood: domain-separated
@@ -87,6 +89,9 @@ runner (cleared env + seed, evidence hashing, wall-clock envelope with process-g
 kill, run-twice determinism meta-check → visible quarantine), the hash-chained
 confirmation ledger with per-round root certificates, the cache-aware round
 orchestrator (unchanged round ⇒ zero executions and a byte-identical root; a changed
-dependency ⇒ exactly its closure re-runs), and the `run` / `verify` / `tap` CLI. Next
-up: T14 (sprint-loops Test-phase adapter), then the scope ladder, sandbox, and
-guarantee tiers. See `agent-tasks/agent-tasks.md`.
+dependency ⇒ exactly the keys whose scope covers it re-run), the full scope ladder
+(`[tests.unit|direct|closure|e2e]` with fail-fast tiers and ledger-visible Skipped),
+the sandbox (memory caps, per-cell network namespaces where the host allows, isolation
+level recorded per confirmation), `toolchain.lock` pinning, and the `run` / `verify` /
+`tap` CLI. Next up (s7): the guarantee tiers — Hypothesis property tier, Kani formal
+tier, and the Phase-J judge gate + repair micro-loop. See `agent-tasks/agent-tasks.md`.

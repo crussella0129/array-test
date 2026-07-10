@@ -1,21 +1,26 @@
-//! T5 — the regression round orchestrator: `R_k` as a function (ARCHITECTURE.md §3).
+//! T5/T5b — the regression round orchestrator: `R_k` as a function (ARCHITECTURE.md §3).
 //!
-//! v1 semantics (D13):
-//! - One CLOSURE-scope cell per unit that declares `[test]`. The cell key includes the
-//!   transitive dependency closure's `code_hash`es in topological order, so the
-//!   schema's "backwards" arrow is *emergent*: changing a dependency changes every
-//!   transitive dependent's key, putting exactly the impact set into the frontier.
-//! - Cache: `Pass` and `Fail` are both reusable forever per key; `Quarantined` and
-//!   `TimedOut` never enter the cache.
+//! Semantics (D13, D15):
+//! - Cells come from `[tests.<scope>]` declarations (legacy `[test]` = closure). The
+//!   scope decides which `code_hash`es enter the key: `unit` none, `direct` direct
+//!   deps, `closure` the transitive closure, `e2e` every unit in the workspace. The
+//!   schema's "backwards" arrow is *emergent*: changing a dependency changes exactly
+//!   the keys whose scope covers it.
+//! - Tiers run unit → direct → closure → e2e; once a completed tier holds a non-Pass,
+//!   higher-tier cells are recorded `Skipped` (visible, never cached, not green).
+//! - Cache: `Pass` and `Fail` are reusable forever per key; `Quarantined`, `TimedOut`,
+//!   and `Skipped` never enter the cache.
 //! - The round root commits to the round's planned cells only — stale keys from
 //!   earlier rounds stay in history but never leak into the current certificate.
+//! - Toolchain (D16): explicit hash > `<units-dir>/toolchain.lock` bytes > the honest
+//!   "unpinned" sentinel.
 
 use crate::dag::{Dag, DagError};
 use crate::hash::{
-    compute_cell_key, compute_code_hash, domain, CellKeyInputs, CodeHashError, Hash,
+    compute_cell_key, compute_code_hash, domain, CellKeyInputs, CellScope, CodeHashError, Hash,
 };
 use crate::ledger::{DetStatus, Ledger, LedgerEntry, LedgerError, RootRecord};
-use crate::manifest::{load_manifest, Manifest, ManifestError};
+use crate::manifest::{load_manifest, Manifest, ManifestError, TestSpec};
 use crate::runner::{run_cell_checked, CellSpec, RunError, RunStatus, Verdict};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -24,7 +29,15 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use thiserror::Error;
 
-pub const DEFAULT_TIMEOUT_SECS: u64 = 60;
+/// Per-scope wall-clock envelope defaults (D15); `timeout_secs` overrides.
+pub fn default_timeout_secs(scope: CellScope) -> u64 {
+    match scope {
+        CellScope::Unit => 10,
+        CellScope::Direct => 30,
+        CellScope::Closure => 60,
+        CellScope::E2e => 300,
+    }
+}
 
 /// The honest "nobody pinned the toolchain" sentinel (gap R-h, s4 research §2.5).
 pub fn unpinned_toolchain() -> Hash {
@@ -107,10 +120,10 @@ pub fn load_workspace(units_dir: &Path) -> Result<Workspace, RoundError> {
     Ok(Workspace { units, dag })
 }
 
-/// Canonical bytes for `test_def_hash`: length-framed command parts, env pairs, and the
-/// effective timeout. Changing any of them re-keys the cell — the test definition is an
-/// input like any other (§2).
-fn test_def_hash(spec: &crate::manifest::TestSpec) -> Hash {
+/// Canonical bytes for `test_def_hash`: length-framed command parts, env pairs, the
+/// effective timeout, and the memory cap. Changing any of them re-keys the cell — the
+/// test definition (envelope included) is an input like any other (§2).
+fn test_def_hash(spec: &TestSpec, scope: CellScope) -> Hash {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&(spec.command.len() as u64).to_le_bytes());
     for part in &spec.command {
@@ -127,60 +140,97 @@ fn test_def_hash(spec: &crate::manifest::TestSpec) -> Hash {
     bytes.extend_from_slice(
         &spec
             .timeout_secs
-            .unwrap_or(DEFAULT_TIMEOUT_SECS)
+            .unwrap_or_else(|| default_timeout_secs(scope))
             .to_le_bytes(),
     );
+    bytes.extend_from_slice(&spec.mem_limit_mb.unwrap_or(0).to_le_bytes());
     Hash::leaf(domain::TEST_DEF, &bytes)
 }
 
 #[derive(Debug)]
 pub struct CellPlan {
     pub unit_id: String,
+    pub scope: CellScope,
     pub spec: CellSpec,
 }
 
-/// Derive the round's cells in topological order (D13: one CLOSURE-scope cell per unit
-/// with a declared test).
+/// The dep hashes a scope admits into the key (D15) — this IS the scope's meaning.
+fn scope_dep_hashes(ws: &Workspace, topo: &[String], id: &str, scope: CellScope) -> Vec<Hash> {
+    match scope {
+        CellScope::Unit => Vec::new(),
+        CellScope::Direct => {
+            let direct = &ws.units[id].manifest.deps;
+            topo.iter()
+                .filter(|u| direct.contains(u))
+                .map(|u| ws.units[u].code_hash)
+                .collect()
+        }
+        CellScope::Closure => {
+            let closure = ws.dag.closure(id);
+            topo.iter()
+                .filter(|u| closure.contains(*u))
+                .map(|u| ws.units[u].code_hash)
+                .collect()
+        }
+        // End-to-end honestly depends on everything: every other unit's hash is in.
+        CellScope::E2e => topo
+            .iter()
+            .filter(|u| u.as_str() != id)
+            .map(|u| ws.units[u].code_hash)
+            .collect(),
+    }
+}
+
+/// Derive the round's cells, ordered tier-by-tier (unit → direct → closure → e2e) and
+/// topologically within each tier — the fail-fast ladder's execution order (D15).
 pub fn plan_round(ws: &Workspace, seed: u64, toolchain_hash: Hash) -> Vec<CellPlan> {
     let topo = ws.dag.topo_order();
     let fixtures = Hash::leaf(domain::FIXTURES, b"");
     let mut plans = Vec::new();
 
-    for id in &topo {
-        let unit = &ws.units[id];
-        let Some(test) = &unit.manifest.test else {
-            continue;
-        };
-        let closure = ws.dag.closure(id);
-        // Dep hashes in topo order — the canonical "in DAG order" for cell keys (§2).
-        let dep_hashes: Vec<Hash> = topo
-            .iter()
-            .filter(|dep| closure.contains(*dep))
-            .map(|dep| ws.units[dep].code_hash)
-            .collect();
+    for scope in [
+        CellScope::Unit,
+        CellScope::Direct,
+        CellScope::Closure,
+        CellScope::E2e,
+    ] {
+        for id in &topo {
+            let unit = &ws.units[id];
+            let test = if scope == CellScope::Closure && unit.manifest.test.is_some() {
+                unit.manifest.test.as_ref()
+            } else {
+                unit.manifest.tests.get(scope.as_str())
+            };
+            let Some(test) = test else { continue };
 
-        let cell_key = compute_cell_key(&CellKeyInputs {
-            target_code_hash: unit.code_hash,
-            scope_dep_hashes_in_dag_order: &dep_hashes,
-            test_def_hash: test_def_hash(test),
-            fixtures_hash: fixtures,
-            seed,
-            toolchain_hash,
-        });
-
-        plans.push(CellPlan {
-            unit_id: id.clone(),
-            spec: CellSpec {
-                cell_key,
-                command: test.command.clone(),
-                cwd: unit.dir.clone(),
-                env: test.env.clone(),
+            let dep_hashes = scope_dep_hashes(ws, &topo, id, scope);
+            let cell_key = compute_cell_key(&CellKeyInputs {
+                target_code_hash: unit.code_hash,
+                scope,
+                scope_dep_hashes_in_dag_order: &dep_hashes,
+                test_def_hash: test_def_hash(test, scope),
+                fixtures_hash: fixtures,
                 seed,
-                timeout: Duration::from_secs(
-                    test.timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS),
-                ),
-            },
-        });
+                toolchain_hash,
+            });
+
+            plans.push(CellPlan {
+                unit_id: id.clone(),
+                scope,
+                spec: CellSpec {
+                    cell_key,
+                    command: test.command.clone(),
+                    cwd: unit.dir.clone(),
+                    env: test.env.clone(),
+                    seed,
+                    timeout: Duration::from_secs(
+                        test.timeout_secs
+                            .unwrap_or_else(|| default_timeout_secs(scope)),
+                    ),
+                    mem_limit_mb: test.mem_limit_mb,
+                },
+            });
+        }
     }
     plans
 }
@@ -216,11 +266,13 @@ fn cache_write(cache_dir: &Path, cached: &CachedConfirmation) -> Result<(), Roun
 pub enum CellOutcomeKind {
     Executed,
     Reused,
+    Skipped,
 }
 
 #[derive(Debug)]
 pub struct CellReport {
     pub unit_id: String,
+    pub scope: CellScope,
     pub cell_key: Hash,
     pub det_status: DetStatus,
     pub kind: CellOutcomeKind,
@@ -244,6 +296,24 @@ impl RoundReport {
             .iter()
             .filter(|c| c.kind == CellOutcomeKind::Reused)
             .count()
+    }
+    pub fn skipped(&self) -> usize {
+        self.cells
+            .iter()
+            .filter(|c| c.kind == CellOutcomeKind::Skipped)
+            .count()
+    }
+}
+
+/// Resolve the toolchain hash (D16): explicit > `toolchain.lock` bytes > unpinned
+/// sentinel.
+pub fn resolve_toolchain(units_dir: &Path, explicit: Option<Hash>) -> Hash {
+    if let Some(h) = explicit {
+        return h;
+    }
+    match fs::read(units_dir.join("toolchain.lock")) {
+        Ok(bytes) => Hash::leaf(domain::TOOLCHAIN, &bytes),
+        Err(_) => unpinned_toolchain(),
     }
 }
 
@@ -291,18 +361,22 @@ fn now_unix_secs() -> u64 {
         .unwrap_or(0)
 }
 
-/// Execute one regression round: plan cells, reuse every confirmation whose key is
-/// cached, hermetically run the rest, append everything to the ledger (reused entries
+/// Execute one regression round: plan cells tier-by-tier, reuse every confirmation
+/// whose key is cached, hermetically run the rest, gate higher tiers behind lower-tier
+/// failures (Skipped, D15), append everything to the ledger (reuse + isolation level
 /// marked), and certify the round root.
 pub fn run_round(
     units_dir: &Path,
     state_dir: &Path,
     round: Option<u32>,
     seed: u64,
-    toolchain_hash: Hash,
+    toolchain_hash: Option<Hash>,
 ) -> Result<RoundReport, RoundError> {
     let ws = load_workspace(units_dir)?;
-    let plans = plan_round(&ws, seed, toolchain_hash);
+    let toolchain = resolve_toolchain(units_dir, toolchain_hash);
+    let plans = plan_round(&ws, seed, toolchain);
+    let isolation = crate::runner::isolation_level();
+    let skipped_evidence = Hash::leaf(domain::EVIDENCE, b"array-test/skipped");
 
     let paths = StatePaths::new(state_dir);
     fs::create_dir_all(paths.ledger_file.parent().unwrap()).map_err(|source| {
@@ -316,10 +390,28 @@ pub fn run_round(
 
     let mut round_entries: Vec<LedgerEntry> = Vec::new();
     let mut cells: Vec<CellReport> = Vec::new();
+    let mut gate_broken = false; // any non-Pass in a COMPLETED lower tier
+    let mut tier_failed = false; // any non-Pass in the tier in progress
+    let mut current_tier: Option<CellScope> = None;
 
     for plan in &plans {
+        if current_tier != Some(plan.scope) {
+            // Tier boundary: a failed lower tier gates everything above it, but not
+            // its own siblings — cells within a tier are semantically parallel.
+            gate_broken = gate_broken || tier_failed;
+            tier_failed = false;
+            current_tier = Some(plan.scope);
+        }
+
         let ts = now_unix_secs();
-        let (det_status, evidence_hash, kind) =
+        let (det_status, evidence_hash, kind) = if gate_broken {
+            // D15: skipping is state, not silence — and never cached.
+            (
+                DetStatus::Skipped,
+                skipped_evidence,
+                CellOutcomeKind::Skipped,
+            )
+        } else {
             match cache_read(&paths.cache_dir, &plan.spec.cell_key) {
                 Some(cached) => (
                     cached.det_status,
@@ -352,7 +444,13 @@ pub fn run_round(
                     }
                     (status, evidence_hash, CellOutcomeKind::Executed)
                 }
-            };
+            }
+        };
+
+        // Status gates, not freshness: a reused Fail closes higher tiers too.
+        if det_status != DetStatus::Pass {
+            tier_failed = true;
+        }
 
         let entry = ledger.append_entry(
             round,
@@ -361,10 +459,12 @@ pub fn run_round(
             evidence_hash,
             ts,
             kind == CellOutcomeKind::Reused,
+            isolation,
         )?;
         round_entries.push(entry);
         cells.push(CellReport {
             unit_id: plan.unit_id.clone(),
+            scope: plan.scope,
             cell_key: plan.spec.cell_key,
             det_status,
             kind,

@@ -21,8 +21,10 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-/// Deterministic-phase status. `Quarantined` and `TimedOut` are first-class, visible
-/// statuses (D10) — neither is green.
+/// Deterministic-phase status. `Quarantined`, `TimedOut`, and `Skipped` are
+/// first-class, visible statuses (D10, D15) — none of them is green. `Skipped` records
+/// a cell gated off by a lower-tier failure (fail-fast ladder, D15); like quarantine,
+/// skipping must be state, not silence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DetStatus {
@@ -30,6 +32,7 @@ pub enum DetStatus {
     Fail,
     Quarantined,
     TimedOut,
+    Skipped,
 }
 
 impl DetStatus {
@@ -39,6 +42,7 @@ impl DetStatus {
             DetStatus::Fail => 1,
             DetStatus::Quarantined => 2,
             DetStatus::TimedOut => 3,
+            DetStatus::Skipped => 4,
         }
     }
 }
@@ -58,8 +62,23 @@ pub struct LedgerEntry {
     /// which confirmations were inherited.
     #[serde(default)]
     pub reused: bool,
+    /// The isolation level the runner actually applied (D12/D16) — the guarantee level
+    /// this confirmation was earned under. Inside the chain hash.
+    #[serde(default = "default_isolation")]
+    pub isolation: crate::runner::IsolationLevel,
     pub prev: Hash,
     pub entry_hash: Hash,
+}
+
+fn default_isolation() -> crate::runner::IsolationLevel {
+    crate::runner::IsolationLevel::EnvOnly
+}
+
+fn isolation_byte(level: crate::runner::IsolationLevel) -> u8 {
+    match level {
+        crate::runner::IsolationLevel::EnvOnly => 0,
+        crate::runner::IsolationLevel::NetIsolated => 1,
+    }
 }
 
 /// Canonical bytes an entry hash covers: fixed-length fields in fixed order, no
@@ -73,9 +92,10 @@ fn canonical_bytes(
     evidence_hash: &Hash,
     ts: u64,
     reused: bool,
+    isolation: crate::runner::IsolationLevel,
     prev: &Hash,
 ) -> Vec<u8> {
-    let mut out = Vec::with_capacity(8 + 4 + 32 + 1 + 32 + 8 + 1 + 32);
+    let mut out = Vec::with_capacity(8 + 4 + 32 + 1 + 32 + 8 + 1 + 1 + 32);
     out.extend_from_slice(&seq.to_le_bytes());
     out.extend_from_slice(&round.to_le_bytes());
     out.extend_from_slice(cell_key.as_bytes());
@@ -83,6 +103,7 @@ fn canonical_bytes(
     out.extend_from_slice(evidence_hash.as_bytes());
     out.extend_from_slice(&ts.to_le_bytes());
     out.push(reused as u8);
+    out.push(isolation_byte(isolation));
     out.extend_from_slice(prev.as_bytes());
     out
 }
@@ -144,10 +165,20 @@ impl Ledger {
         evidence_hash: Hash,
         ts: u64,
     ) -> Result<LedgerEntry, LedgerError> {
-        self.append_entry(round, cell_key, det_status, evidence_hash, ts, false)
+        self.append_entry(
+            round,
+            cell_key,
+            det_status,
+            evidence_hash,
+            ts,
+            false,
+            crate::runner::IsolationLevel::EnvOnly,
+        )
     }
 
-    /// Append one confirmation, marking whether it was inherited from the cache (D13).
+    /// Append one confirmation, marking whether it was inherited from the cache (D13)
+    /// and the isolation level it was earned under (D16).
+    #[allow(clippy::too_many_arguments)]
     pub fn append_entry(
         &mut self,
         round: u32,
@@ -156,6 +187,7 @@ impl Ledger {
         evidence_hash: Hash,
         ts: u64,
         reused: bool,
+        isolation: crate::runner::IsolationLevel,
     ) -> Result<LedgerEntry, LedgerError> {
         let seq = self.next_seq;
         let prev = self.last_hash;
@@ -169,6 +201,7 @@ impl Ledger {
                 &evidence_hash,
                 ts,
                 reused,
+                isolation,
                 &prev,
             ),
         );
@@ -180,6 +213,7 @@ impl Ledger {
             evidence_hash,
             ts,
             reused,
+            isolation,
             prev,
             entry_hash,
         };
@@ -248,6 +282,7 @@ pub fn load_and_verify(path: &Path) -> Result<Vec<LedgerEntry>, LedgerError> {
                 &entry.evidence_hash,
                 entry.ts,
                 entry.reused,
+                entry.isolation,
                 &entry.prev,
             ),
         );

@@ -70,12 +70,24 @@ fn given_a_file_rename_with_same_bytes_should_change_code_hash() {
 fn base_cell_key_inputs(dep_hashes: &[Hash]) -> CellKeyInputs<'_> {
     CellKeyInputs {
         target_code_hash: Hash::of(b"target"),
+        scope: array_test::hash::CellScope::Closure,
         scope_dep_hashes_in_dag_order: dep_hashes,
         test_def_hash: Hash::of(b"test-def"),
         fixtures_hash: Hash::of(b"fixtures"),
         seed: 42,
         toolchain_hash: Hash::of(b"toolchain"),
     }
+}
+
+#[test]
+fn given_the_same_inputs_at_two_scopes_should_produce_different_cell_keys() {
+    let deps: [Hash; 0] = [];
+    let mut a = base_cell_key_inputs(&deps);
+    let mut b = base_cell_key_inputs(&deps);
+    a.scope = array_test::hash::CellScope::Unit;
+    b.scope = array_test::hash::CellScope::Closure;
+
+    assert_ne!(compute_cell_key(&a), compute_cell_key(&b));
 }
 
 #[test]

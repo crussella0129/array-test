@@ -3,7 +3,7 @@
 
 use array_test::hash::Hash;
 use array_test::ledger::{array_root, load_and_verify, RootRecord};
-use array_test::round::{run_round, unpinned_toolchain, StatePaths};
+use array_test::round::{run_round, StatePaths};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -64,10 +64,11 @@ fn cmd_run(args: &[String]) -> ExitCode {
         Some(Ok(n)) => n,
         Some(Err(_)) => return fail("--seed must be an integer"),
     };
+    // D16 precedence: explicit --toolchain-hash > <units>/toolchain.lock > sentinel.
     let toolchain = match arg_value(args, "--toolchain-hash") {
-        None => unpinned_toolchain(),
+        None => None,
         Some(s) => match s.parse::<Hash>() {
-            Ok(h) => h,
+            Ok(h) => Some(h),
             Err(e) => return fail(&e.to_string()),
         },
     };
@@ -82,21 +83,24 @@ fn cmd_run(args: &[String]) -> ExitCode {
         Ok(report) => {
             for cell in &report.cells {
                 println!(
-                    "  {:<24} {:?} ({})",
+                    "  {:<24} [{}] {:?} ({})",
                     cell.unit_id,
+                    cell.scope.as_str(),
                     cell.det_status,
                     match cell.kind {
                         array_test::round::CellOutcomeKind::Executed => "executed",
                         array_test::round::CellOutcomeKind::Reused => "reused",
+                        array_test::round::CellOutcomeKind::Skipped => "skipped",
                     }
                 );
             }
             println!(
-                "R{}: {} cells, {} executed, {} reused, root {}",
+                "R{}: {} cells, {} executed, {} reused, {} skipped, root {}",
                 report.record.round,
                 report.record.cells,
                 report.executed(),
                 report.reused(),
+                report.skipped(),
                 report.record.root
             );
             if report.record.all_pass {

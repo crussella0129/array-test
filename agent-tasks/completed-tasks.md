@@ -63,3 +63,14 @@ Append-only completion log (sprint-loops convention).
   as a cell (prebuilt libtest binary through the tap adapter), passes the meta-check
   un-quarantined, certifies a green root over itself, survives `verify`, and reuses the
   confirmation on round 2 with an identical root. Full-workspace version → T15b.
+
+## Sprint s6
+- [x] **T5b — Scope ladder (D15).** [Rust] `[tests.unit|direct|closure|e2e]`;
+  scope-tagged cell keys where the scope decides the dep-hash set (unit none / direct /
+  closure / e2e = whole workspace); fail-fast tiers with ledger-visible `Skipped`
+  (never cached, not green, siblings unaffected); per-scope timeout defaults.
+- [x] **T3b — Sandbox (D16, partial by design).** [Rust] `mem_limit_mb` → RLIMIT_AS;
+  one-time netns capability probe, fresh namespace per cell fail-closed when available;
+  isolation level recorded per confirmation in the chained ledger. FS scoping → T3c.
+- [x] **R-h — Toolchain pinning mechanism (D16).** explicit `--toolchain-hash` >
+  `toolchain.lock` bytes > unpinned sentinel; lock changes re-key the workspace.

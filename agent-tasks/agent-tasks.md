@@ -7,15 +7,10 @@ Persistent across sprints (sprint-loops convention). Ordered by build dependency
 property tier (T7); TAP as the language-agnostic evidence contract (T6) — riteway is an
 optional adapter for JS units, not a dependency of the core.
 
-## Engine (s5+)
-- [ ] **T3b — Full sandbox.** [Rust] Complete the D12/R-g gap: memory caps (rlimits),
-  network isolation (namespaces/seccomp where available), filesystem read scoping.
-  Upgrades a cell's determinism claim from "meta-checked" to "sandbox-guaranteed";
-  the ledger should record which level applied. Also fold in R-h: a real toolchain
-  pinning story replacing the "unpinned" sentinel.
-- [ ] **T5b — Scope ladder.** [Rust] Generalize v1's CLOSURE-only cells (D13.1) to the
-  full UNIT/DIRECT/CLOSURE/E2E ladder with per-scope resource envelopes and fail-fast
-  ordering (§1.4, §5).
+## Engine (s7+)
+- [ ] **T3c — Filesystem read scoping.** [Rust] The last R-g fragment: bind-mount/
+  chroot-style scoping so a cell can only read its declared inputs. (Memory caps and
+  network isolation landed s6, D16.)
 - [ ] **T15b — Full self-hosting workspace.** Extend the T15 milestone (one suite,
   landed s5) to a committed `selfhost/` workspace covering every test suite as units
   with real deps, producing the first durable ledger — which formally freezes the v1

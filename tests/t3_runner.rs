@@ -16,6 +16,7 @@ fn sh(script: &str) -> CellSpec {
         env: BTreeMap::new(),
         seed: 42,
         timeout: Duration::from_secs(5),
+        mem_limit_mb: None,
     }
 }
 

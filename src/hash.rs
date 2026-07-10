@@ -39,6 +39,8 @@ pub mod domain {
     pub const CELL_KEY: &str = "array-test/v1/cell-key";
     pub const TEST_DEF: &str = "array-test/v1/test-def";
     pub const FIXTURES: &str = "array-test/v1/fixtures";
+    pub const SCOPE: &str = "array-test/v1/scope";
+    pub const TOOLCHAIN: &str = "array-test/v1/toolchain";
     pub const EVIDENCE: &str = "array-test/v1/evidence";
     pub const LEDGER_ENTRY: &str = "array-test/v1/ledger-entry";
     pub const LEDGER_GENESIS: &str = "array-test/v1/ledger-genesis";
@@ -249,12 +251,35 @@ pub fn compute_code_hash(unit_dir: &Path) -> Result<Hash, CodeHashError> {
     Ok(Hash::node(domain::CODE_HASH, &parts))
 }
 
+/// The integration scope of a cell (ARCHITECTURE.md §1.4, D15). The scope decides
+/// which dep hashes enter the key — that IS its meaning in a content-addressed world —
+/// and is itself hashed into the key so the same test at two scopes cannot collide.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CellScope {
+    Unit = 0,
+    Direct = 1,
+    Closure = 2,
+    E2e = 3,
+}
+
+impl CellScope {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CellScope::Unit => "unit",
+            CellScope::Direct => "direct",
+            CellScope::Closure => "closure",
+            CellScope::E2e => "e2e",
+        }
+    }
+}
+
 /// Inputs to a cell's `cell_key` (ARCHITECTURE.md §2). `scope_dep_hashes_in_dag_order`
 /// must be supplied in a deterministic order — use [`crate::dag::Dag::topo_order`] — and
 /// the same order must be used every time this cell is keyed, or the key will spuriously
 /// change.
 pub struct CellKeyInputs<'a> {
     pub target_code_hash: Hash,
+    pub scope: CellScope,
     pub scope_dep_hashes_in_dag_order: &'a [Hash],
     pub test_def_hash: Hash,
     pub fixtures_hash: Hash,
@@ -262,15 +287,17 @@ pub struct CellKeyInputs<'a> {
     pub toolchain_hash: Hash,
 }
 
-/// `cell_key = H(target.code_hash ‖ H(scope deps) ‖ test_def_hash ‖ fixtures_hash ‖ seed
-/// ‖ toolchain_hash)` (ARCHITECTURE.md §2).
+/// `cell_key = H(target.code_hash ‖ scope ‖ H(scope deps) ‖ test_def_hash ‖
+/// fixtures_hash ‖ seed ‖ toolchain_hash)` (ARCHITECTURE.md §2, D15).
 pub fn compute_cell_key(inputs: &CellKeyInputs) -> Hash {
+    let scope_hash = Hash::leaf(domain::SCOPE, &[inputs.scope as u8]);
     let deps_hash = Hash::node(domain::DEPS_LIST, inputs.scope_dep_hashes_in_dag_order);
     let seed_hash = Hash::leaf(domain::SEED, &inputs.seed.to_le_bytes());
     Hash::node(
         domain::CELL_KEY,
         &[
             inputs.target_code_hash,
+            scope_hash,
             deps_hash,
             inputs.test_def_hash,
             inputs.fixtures_hash,

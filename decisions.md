@@ -205,3 +205,39 @@ adapter itself ever emits instability, the cell quarantines, which is correct.
 `cargo test` — cargo holds the build-dir lock for its whole session (inner cargo would
 deadlock the outer), and the direct binary needs no PATH/HOME at all: strictly more
 hermetic. Contexts remain formally frozen-on-first-durable-ledger (s5 research §5).
+
+## D15 — Scope ladder semantics: keys ARE scopes; gating is visible state (s6)
+**Context:** T5b generalizes D13.1's closure-only cells to the full ladder (§1.4).
+**Decision:**
+1. The scope decides which `code_hash`es enter the cell key — that IS its meaning:
+   `unit` none, `direct` direct deps, `closure` transitive closure, `e2e` every unit in
+   the workspace ("end-to-end depends on everything" taken literally). The scope itself
+   is hashed in (SCOPE-domain leaf), so one test at two scopes cannot collide.
+2. Declaration: `[tests.unit|direct|closure|e2e]`; legacy `[test]` = `[tests.closure]`
+   (both together rejected). `[tests.e2e]` doubles as the entrypoint declaration.
+3. Fail-fast tiers: unit → direct → closure → e2e. Once a completed tier holds a
+   non-Pass, higher-tier cells are recorded **`Skipped`** — a ledger-visible status,
+   never cached, not green (same doctrine as quarantine: skipping is state, not
+   silence). Within-tier siblings still run; a reused Fail gates like a fresh one.
+4. Per-scope wall-clock defaults (10/30/60/300s); memory caps opt-in per test.
+**Design note surfaced by testing:** `code_hash` covers src+contract, not the manifest,
+so byte-identical units share cell keys and dedup through the cache. Correct — identical
+content is identical work — but fixture authors (and future doc readers) should know.
+
+## D16 — Sandbox levels, probed and recorded; toolchain.lock closes R-h (s6)
+**Context:** T3b (D12's deferred gap) and R-h (unpinned toolchain sentinel).
+**Decision:**
+- **Memory:** `mem_limit_mb` → `RLIMIT_AS` in pre_exec; breach = allocation failure
+  inside the cell = `Fail` (a red cell, not a timeout).
+- **Network:** one-time probe for netns capability (`CLONE_NEWNET`, else
+  `CLONE_NEWUSER|CLONE_NEWNET`); on success **every** cell runs in a fresh namespace
+  (loopback only) and pre_exec fails closed — a cell that cannot be isolated does not
+  run. On failure, env-hygiene level as before. Either way the achieved level is
+  recorded **per confirmation** in the chained ledger (`isolation: env_only |
+  net_isolated`) — D12's "the ledger records which guarantee level applied", now real.
+- **Toolchain:** explicit `--toolchain-hash` > `<units-dir>/toolchain.lock` bytes
+  (TOOLCHAIN-domain leaf) > unpinned sentinel. Mechanism, not policy: what identifies a
+  toolchain is the consumer's business to write into the file. R-h closed at the
+  mechanism level.
+**Remaining gap:** filesystem read scoping — the last R-g fragment; the meta-check
+polices what the sandbox doesn't block.

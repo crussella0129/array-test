@@ -4,7 +4,7 @@
 #![cfg(unix)]
 
 use array_test::ledger::{load_and_verify, DetStatus};
-use array_test::round::{run_round, unpinned_toolchain, CellOutcomeKind, RoundReport, StatePaths};
+use array_test::round::{run_round, CellOutcomeKind, RoundReport, StatePaths};
 use std::fs;
 use std::path::Path;
 use tempfile::{tempdir, TempDir};
@@ -39,7 +39,7 @@ fn chain_workspace() -> TempDir {
 }
 
 fn round(units: &Path, state: &Path) -> RoundReport {
-    run_round(units, state, None, 0, unpinned_toolchain()).unwrap()
+    run_round(units, state, None, 0, None).unwrap()
 }
 
 fn executed_units(report: &RoundReport) -> Vec<&str> {
