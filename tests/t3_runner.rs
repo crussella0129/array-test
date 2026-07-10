@@ -108,7 +108,9 @@ fn given_a_deterministic_cell_the_meta_check_should_confirm_it() {
 fn given_a_nondeterministic_cell_the_meta_check_should_quarantine_it() {
     let verdict = run_cell_checked(&sh("head -c 16 /dev/urandom")).unwrap();
     match verdict {
-        Verdict::Quarantined { first, second } => assert_ne!(first, second),
+        Verdict::Quarantined { first, second } => {
+            assert_ne!(first.evidence_hash, second.evidence_hash)
+        }
         Verdict::Confirmed(_) => panic!("nondeterministic cell escaped quarantine"),
     }
 }

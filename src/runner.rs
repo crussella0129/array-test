@@ -123,6 +123,8 @@ impl Evidence {
         framed.extend_from_slice(&self.stdout);
         framed.extend_from_slice(&(self.stderr.len() as u64).to_le_bytes());
         framed.extend_from_slice(&self.stderr);
+        // None (killed by signal / no exit code) encodes as i32::MIN — a value no real
+        // process exit can produce, so the sentinel cannot collide with a status.
         framed.extend_from_slice(&(self.exit_code.unwrap_or(i32::MIN) as i64).to_le_bytes());
         framed
     }
@@ -141,11 +143,16 @@ pub struct RunOutcome {
 }
 
 /// Result of the determinism meta-check (§6): the cell ran twice; either both runs
-/// agreed byte-for-byte, or the cell is quarantined with both hashes recorded.
+/// agreed byte-for-byte, or the cell is quarantined with BOTH runs carried in full —
+/// the whole meaning of quarantine is "these disagreed", so both transcripts are
+/// evidence (F9).
 #[derive(Debug)]
 pub enum Verdict {
     Confirmed(RunOutcome),
-    Quarantined { first: Hash, second: Hash },
+    Quarantined {
+        first: Box<RunOutcome>,
+        second: Box<RunOutcome>,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -296,8 +303,8 @@ pub fn run_cell_checked(spec: &CellSpec) -> Result<Verdict, RunError> {
         Ok(Verdict::Confirmed(first))
     } else {
         Ok(Verdict::Quarantined {
-            first: first.evidence_hash,
-            second: second.evidence_hash,
+            first: Box::new(first),
+            second: Box::new(second),
         })
     }
 }

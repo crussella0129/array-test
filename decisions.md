@@ -299,3 +299,31 @@ integration test so the example cannot rot silently.
 false to true and found it already true — correctly, because the judge (not det) had
 rejected that round and certificates are Phase-D-only by design (D7). The forgery that
 matters is the root hash itself; the test now flips that.
+
+## D20 — Sequencing determination: T15b next; extension is by sidecar and by value (s9)
+**Context:** User asked whether T7b/T8b/T12/T13/T3c must precede T15b (durable ledger →
+v1 context freeze) "so 1.0 proves itself fully," or whether they're separable.
+**Determination: separable — T15b is next.** The freeze locks context strings and byte
+*layouts*, and explicitly permits adding contexts. Walking each deferred tier: T7b's
+contract enforcement is a command (already inside `test_def`); T8b's `proof_hash` and
+T12's mutation scores follow the judgments-ledger precedent — new evidence classes get
+their own hash-chained **sidecar** keyed by `cell_key` (additive, post-freeze-legal);
+T13's corpus is fixtures (`fixtures_hash` already in the key); T3c is a new
+`IsolationLevel` *value*, not a new layout. Doctrine: **post-freeze extension happens by
+sidecar and by value, never by relayout.** The judgments ledger wasn't just a feature —
+it was the extension mechanism. The deferred tiers prove 1.0's *claims*; T15b makes
+1.0's *promise* (stable keys) — and shipping the promise first makes the tiers' later
+results durable.
+**Corollaries enforced this sprint (last free re-key):** F8 sentinel hygiene (skipped
+cells get a `no-evidence` domain; unpinned toolchain properly TOOLCHAIN-domained).
+**Frozen constants recorded:** per-scope timeout defaults (10/30/60/300s) are hashed
+into `test_def` via the effective timeout, so they freeze with v1; changing them
+post-freeze is a re-key event.
+**Review findings applied (F8–F16):** quarantine now stores BOTH disagreeing
+transcripts (the one status whose meaning is "these disagreed" no longer discards its
+evidence); round numbers derive from the ledger, not the roots dir (crash between
+append and certificate-write can no longer merge two attempts under one number);
+`Ledger::record(ConfirmationInput)` replaces the 8-arg method; judgments appends are
+open-once O(1); `manifest.sprint` optional (D11 polish); audit notes certificate-less
+rounds; ARCHITECTURE §7.4 records the trust model — integrity you verify, truthfulness
+you reproduce (re-run from an empty cache and byte-compare roots).

@@ -42,6 +42,10 @@ pub mod domain {
     pub const SCOPE: &str = "array-test/v1/scope";
     pub const TOOLCHAIN: &str = "array-test/v1/toolchain";
     pub const EVIDENCE: &str = "array-test/v1/evidence";
+    /// Sentinel domain for cells that produced no evidence (e.g. Skipped) — never
+    /// shares the EVIDENCE domain, so a sentinel cannot collide with real evidence
+    /// even in principle (F8: "impossible by construction" beats "unreachable").
+    pub const NO_EVIDENCE: &str = "array-test/v1/no-evidence";
     pub const LEDGER_ENTRY: &str = "array-test/v1/ledger-entry";
     pub const LEDGER_GENESIS: &str = "array-test/v1/ledger-genesis";
     pub const ROOT_LEAF: &str = "array-test/v1/root-leaf";
@@ -91,9 +95,11 @@ impl Hash {
 
     /// Bare hex, no `blake3:` prefix — safe for filenames on every platform.
     pub fn hex(&self) -> String {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
         let mut s = String::with_capacity(HASH_LEN * 2);
         for b in &self.0 {
-            s.push_str(&format!("{:02x}", b));
+            s.push(HEX[(b >> 4) as usize] as char);
+            s.push(HEX[(b & 0xf) as usize] as char);
         }
         s
     }

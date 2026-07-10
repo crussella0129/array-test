@@ -97,3 +97,11 @@ Append-only completion log (sprint-loops convention).
   for each surface.
 - [x] **Quickstart example.** `examples/quickstart/` committed (dep edge, two scopes,
   README walkthrough, judge.toml.example), guarded green by an integration test.
+
+## Sprint s9 (review + refactor)
+- [x] **Sequencing determination (D20).** T7b/T8b/T12/T13/T3c are separable from T15b:
+  extension is by sidecar and by value, never by relayout. T15b is next.
+- [x] **F8–F16 applied.** Sentinel domain hygiene (last free re-key); quarantine stores
+  both transcripts; ledger-derived round numbers; `Ledger::record` struct API;
+  judgments open-once; `manifest.sprint` optional; cosmetics; §7.4 trust model; audit
+  notes certificate-less rounds.

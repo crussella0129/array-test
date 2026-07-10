@@ -92,6 +92,26 @@ pub fn full_audit(state_dir: &Path) -> AuditReport {
         }
     }
 
+    // F16: rounds present in the ledger but lacking a certificate (e.g. a crash
+    // between ledger-append and certificate-write) are worth a note — not an
+    // integrity violation, but silence isn't a note either.
+    let mut uncertified: Vec<u32> = by_round
+        .keys()
+        .filter(|round| !paths.roots_dir.join(format!("R{round}.json")).exists())
+        .copied()
+        .collect();
+    uncertified.sort_unstable();
+    if !uncertified.is_empty() {
+        report.notes.push(format!(
+            "ledger round(s) without a certificate: {}",
+            uncertified
+                .iter()
+                .map(|r| format!("R{r}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
     // 3. Judgments chain (§7.3): audited even though never rooted.
     match read_judgments(&paths) {
         Ok(judgments) => report.judgments = judgments.len(),

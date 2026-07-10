@@ -332,6 +332,19 @@ but it is deliberately **excluded** from the Merkle root in §7.1. A cell's prac
 deterministic root. This keeps "provable" honest: we never let a statistical opinion,
 however well-audited, masquerade as a reproducible proof.
 
+### 7.4 What a certificate attests (trust model, D20)
+A green root certifies *what the runner recorded*, tamper-evidently: the chain and root
+are recomputable by anyone, so no one can alter history after the fact. It does **not**
+prove the runner told the truth while writing — in particular, the det cache is
+trusted-local state: a tampered cache feeds honestly-chained entries that record runs
+which never happened, and `full_audit` cannot (and does not pretend to) detect that.
+
+The distrust protocol is *reproduction*, and determinism is what makes it cheap: re-run
+the same units with an **empty cache** on hardware you trust — the array root commits
+only to `{cell_key → status}` (no timestamps, no history shape), so an honest re-run
+must reproduce the same root byte-for-byte. Integrity you verify; truthfulness you
+reproduce.
+
 ---
 
 ## 8. On-disk layout (the state machine)

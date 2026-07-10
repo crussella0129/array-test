@@ -39,9 +39,10 @@ pub fn default_timeout_secs(scope: CellScope) -> u64 {
     }
 }
 
-/// The honest "nobody pinned the toolchain" sentinel (gap R-h, s4 research §2.5).
+/// The honest "nobody pinned the toolchain" sentinel (gap R-h, s4 research §2.5) —
+/// properly domained under TOOLCHAIN (F8).
 pub fn unpinned_toolchain() -> Hash {
-    Hash::of(b"array-test/v1/toolchain-unpinned")
+    Hash::leaf(domain::TOOLCHAIN, b"unpinned")
 }
 
 #[derive(Debug, Error)]
@@ -358,24 +359,6 @@ impl StatePaths {
         }
     }
 
-    /// Next round number: one past the highest existing `R<k>.json`, starting at 1.
-    pub fn next_round(&self) -> u32 {
-        let Ok(entries) = fs::read_dir(&self.roots_dir) else {
-            return 1;
-        };
-        entries
-            .filter_map(|e| e.ok())
-            .filter_map(|e| {
-                let name = e.file_name().into_string().ok()?;
-                name.strip_prefix('R')?
-                    .strip_suffix(".json")?
-                    .parse::<u32>()
-                    .ok()
-            })
-            .max()
-            .map(|max| max + 1)
-            .unwrap_or(1)
-    }
 }
 
 /// Write an executed cell's evidence bytes under their hash (content-addressed store).
@@ -418,7 +401,7 @@ pub fn run_round(
     let toolchain = resolve_toolchain(units_dir, toolchain_hash);
     let plans = plan_round(&ws, seed, toolchain);
     let isolation = crate::runner::isolation_level();
-    let skipped_evidence = Hash::leaf(domain::EVIDENCE, b"array-test/skipped");
+    let skipped_evidence = Hash::leaf(domain::NO_EVIDENCE, b"skipped");
 
     let paths = StatePaths::new(state_dir);
     fs::create_dir_all(paths.ledger_file.parent().unwrap()).map_err(|source| {
@@ -427,8 +410,13 @@ pub fn run_round(
             source,
         }
     })?;
-    let round = round.unwrap_or_else(|| paths.next_round());
-    let (mut ledger, _history) = Ledger::open(&paths.ledger_file)?;
+    let (mut ledger, history) = Ledger::open(&paths.ledger_file)?;
+    // F10: the ledger is the state machine; certificates are outputs. Deriving the
+    // round number from the roots dir would reuse a number after a crash between
+    // ledger-append and certificate-write, merging two attempts under one round.
+    let round = round.unwrap_or_else(|| {
+        history.iter().map(|e| e.round).max().map(|r| r + 1).unwrap_or(1)
+    });
 
     let mut round_entries: Vec<LedgerEntry> = Vec::new();
     let mut cells: Vec<CellReport> = Vec::new();
@@ -474,7 +462,14 @@ pub fn run_round(
                             store_evidence(&paths.evidence_dir, &outcome)?;
                             (status, outcome.evidence_hash)
                         }
-                        Verdict::Quarantined { first, .. } => (DetStatus::Quarantined, first),
+                        Verdict::Quarantined { first, second } => {
+                            // F9: quarantine means "these two disagreed" — both
+                            // transcripts ARE the evidence; store both, record the
+                            // first's hash in the ledger as before.
+                            store_evidence(&paths.evidence_dir, &first)?;
+                            store_evidence(&paths.evidence_dir, &second)?;
+                            (DetStatus::Quarantined, first.evidence_hash)
+                        }
                     };
                     // D13: only reproducible verdicts enter the cache.
                     if matches!(status, DetStatus::Pass | DetStatus::Fail) {
@@ -497,16 +492,16 @@ pub fn run_round(
             tier_failed = true;
         }
 
-        let entry = ledger.append_entry(
+        let entry = ledger.record(crate::ledger::ConfirmationInput {
             round,
-            plan.spec.cell_key,
+            cell_key: plan.spec.cell_key,
             det_status,
             evidence_hash,
             ts,
-            kind == CellOutcomeKind::Reused,
+            reused: kind == CellOutcomeKind::Reused,
             isolation,
-            plan.guarantee,
-        )?;
+            guarantee: plan.guarantee,
+        })?;
         round_entries.push(entry);
         cells.push(CellReport {
             unit_id: plan.unit_id.clone(),

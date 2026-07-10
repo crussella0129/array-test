@@ -12,6 +12,9 @@ use thiserror::Error;
 #[derive(Debug, Clone, Deserialize)]
 pub struct Manifest {
     pub id: String,
+    /// Sprint provenance — meaningful for sprint-loop workflows, optional for
+    /// standalone consumers (D11/F13). Not part of `code_hash`.
+    #[serde(default)]
     pub sprint: u32,
     pub version: String,
     #[serde(default)]

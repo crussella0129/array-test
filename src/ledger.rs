@@ -152,6 +152,19 @@ pub enum LedgerError {
     ChainBroken { seq: u64, reason: String },
 }
 
+/// Everything a confirmation records (F11) — see field docs on [`LedgerEntry`].
+#[derive(Debug, Clone, Copy)]
+pub struct ConfirmationInput {
+    pub round: u32,
+    pub cell_key: Hash,
+    pub det_status: DetStatus,
+    pub evidence_hash: Hash,
+    pub ts: u64,
+    pub reused: bool,
+    pub isolation: crate::runner::IsolationLevel,
+    pub guarantee: Guarantee,
+}
+
 /// An append-only, hash-chained ledger backed by an ndjson file.
 #[derive(Debug)]
 pub struct Ledger {
@@ -182,7 +195,8 @@ impl Ledger {
         ))
     }
 
-    /// Append a freshly-executed confirmation; computes seq, prev link, and entry hash.
+    /// Append a freshly-executed confirmation with default provenance; computes seq,
+    /// prev link, and entry hash. For full provenance use [`Ledger::record`].
     pub fn append(
         &mut self,
         round: u32,
@@ -191,32 +205,31 @@ impl Ledger {
         evidence_hash: Hash,
         ts: u64,
     ) -> Result<LedgerEntry, LedgerError> {
-        self.append_entry(
+        self.record(ConfirmationInput {
             round,
             cell_key,
             det_status,
             evidence_hash,
             ts,
-            false,
-            crate::runner::IsolationLevel::EnvOnly,
-            Guarantee::Example,
-        )
+            reused: false,
+            isolation: crate::runner::IsolationLevel::EnvOnly,
+            guarantee: Guarantee::Example,
+        })
     }
 
-    /// Append one confirmation, marking whether it was inherited from the cache (D13),
-    /// the isolation level it was earned under (D16), and its declared guarantee (D17).
-    #[allow(clippy::too_many_arguments)]
-    pub fn append_entry(
-        &mut self,
-        round: u32,
-        cell_key: Hash,
-        det_status: DetStatus,
-        evidence_hash: Hash,
-        ts: u64,
-        reused: bool,
-        isolation: crate::runner::IsolationLevel,
-        guarantee: Guarantee,
-    ) -> Result<LedgerEntry, LedgerError> {
+    /// Append one confirmation with full provenance: cache inheritance (D13), the
+    /// isolation level it was earned under (D16), its declared guarantee (D17).
+    pub fn record(&mut self, input: ConfirmationInput) -> Result<LedgerEntry, LedgerError> {
+        let ConfirmationInput {
+            round,
+            cell_key,
+            det_status,
+            evidence_hash,
+            ts,
+            reused,
+            isolation,
+            guarantee,
+        } = input;
         let seq = self.next_seq;
         let prev = self.last_hash;
         let entry_hash = Hash::leaf(

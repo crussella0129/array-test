@@ -189,56 +189,73 @@ fn judgment_canonical(seq: u64, round: u32, j: &CellJudgment, ts: u64, prev: &Ha
     out
 }
 
-fn append_judgment(
-    paths: &StatePaths,
-    round: u32,
-    judgment: &CellJudgment,
-) -> Result<(), JudgeError> {
-    use std::io::Write;
-    let existing = read_judgments(paths)?;
-    let (prev, seq) = existing
-        .last()
-        .map(|e| (e.entry_hash, e.seq + 1))
-        .unwrap_or((judgment_genesis(), 0));
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let entry_hash = Hash::leaf(
-        domain::JUDGMENT_ENTRY,
-        &judgment_canonical(seq, round, judgment, ts, &prev),
-    );
-    let entry = JudgmentEntry {
-        seq,
-        round,
-        judgment: judgment.clone(),
-        ts,
-        prev,
-        entry_hash,
-    };
-    fs::create_dir_all(paths.judgments_file.parent().unwrap()).map_err(|source| {
-        JudgeError::Io {
+/// Open-once appender for the judgments chain (F12): one verify-read at open, O(1)
+/// appends thereafter — mirroring `Ledger`.
+struct JudgmentWriter {
+    path: PathBuf,
+    last_hash: Hash,
+    next_seq: u64,
+}
+
+impl JudgmentWriter {
+    fn open(paths: &StatePaths) -> Result<JudgmentWriter, JudgeError> {
+        let existing = read_judgments(paths)?;
+        let (last_hash, next_seq) = existing
+            .last()
+            .map(|e| (e.entry_hash, e.seq + 1))
+            .unwrap_or((judgment_genesis(), 0));
+        Ok(JudgmentWriter {
             path: paths.judgments_file.clone(),
-            source,
-        }
-    })?;
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&paths.judgments_file)
-        .map_err(|source| JudgeError::Io {
-            path: paths.judgments_file.clone(),
+            last_hash,
+            next_seq,
+        })
+    }
+
+    fn append(&mut self, round: u32, judgment: &CellJudgment) -> Result<(), JudgeError> {
+        use std::io::Write;
+        let seq = self.next_seq;
+        let prev = self.last_hash;
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let entry_hash = Hash::leaf(
+            domain::JUDGMENT_ENTRY,
+            &judgment_canonical(seq, round, judgment, ts, &prev),
+        );
+        let entry = JudgmentEntry {
+            seq,
+            round,
+            judgment: judgment.clone(),
+            ts,
+            prev,
+            entry_hash,
+        };
+        fs::create_dir_all(self.path.parent().unwrap()).map_err(|source| JudgeError::Io {
+            path: self.path.clone(),
             source,
         })?;
-    writeln!(
-        file,
-        "{}",
-        serde_json::to_string(&entry).expect("JudgmentEntry serializes")
-    )
-    .map_err(|source| JudgeError::Io {
-        path: paths.judgments_file.clone(),
-        source,
-    })
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .map_err(|source| JudgeError::Io {
+                path: self.path.clone(),
+                source,
+            })?;
+        writeln!(
+            file,
+            "{}",
+            serde_json::to_string(&entry).expect("JudgmentEntry serializes")
+        )
+        .map_err(|source| JudgeError::Io {
+            path: self.path.clone(),
+            source,
+        })?;
+        self.last_hash = entry_hash;
+        self.next_seq += 1;
+        Ok(())
+    }
 }
 
 /// Load and chain-verify the judgment ledger.
@@ -391,6 +408,7 @@ fn judge_round(
     det: &RoundReport,
 ) -> Result<Vec<JudgedCell>, JudgeError> {
     let jhash = judge_hash(config);
+    let mut writer = JudgmentWriter::open(paths)?;
     let mut judged = Vec::new();
     for cell in &det.cells {
         if cell.det_status != DetStatus::Pass {
@@ -420,7 +438,7 @@ fn judge_round(
                 evidence_hash: cell.evidence_hash,
             },
         )?;
-        append_judgment(paths, det.record.round, &judgment)?;
+        writer.append(det.record.round, &judgment)?;
         fs::create_dir_all(&paths.judge_cache_dir).map_err(|source| JudgeError::Io {
             path: paths.judge_cache_dir.clone(),
             source,

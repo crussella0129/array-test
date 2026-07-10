@@ -45,6 +45,9 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
   D18), content-addressed evidence store.
 - `sprints/s8/` — closed, green: full-audit verifier (D19 — every root certificate,
   judgments chain, evidence store) + the committed `examples/quickstart` workspace.
+- `sprints/s9/` — closed, green: review+refactor (findings F8–F16: sentinel hygiene,
+  quarantine transparency, ledger-derived rounds, trust model §7.4) + the sequencing
+  determination (D20): extension is by sidecar and by value; T15b next.
 
 ## Building & running
 ```
@@ -89,7 +92,7 @@ See [`examples/quickstart/`](examples/quickstart/) for a runnable two-unit works
 and full verification.
 
 ## Status
-Sprints **s0–s8** all closed green — 103 tests, and the system is **self-hosting**:
+Sprints **s0–s9** all closed green — 107 tests, and the system is **self-hosting**:
 array-test runs its own test suite as a cell (through the `tap` evidence adapter),
 passes its own determinism meta-check, and certifies a green root over itself — then
 reuses that confirmation on the next round. Under the hood: domain-separated

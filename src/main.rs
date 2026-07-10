@@ -82,55 +82,7 @@ fn cmd_run(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
         Ok(Some(config)) => {
-            return match array_test::judge::run_with_judgment(
-                &units_path,
-                &state_path,
-                seed,
-                toolchain,
-                &config,
-            ) {
-                Ok(outcome) => {
-                    for cell in &outcome.judged {
-                        println!(
-                            "  judged {:<17} [{}] {} ({}/{} runs{})",
-                            cell.unit_id,
-                            cell.scope.as_str(),
-                            if cell.judgment.verdict { "PASS" } else { "REJECTED" },
-                            cell.judgment.pass_runs,
-                            cell.judgment.total_runs,
-                            if cell.cached { ", cached" } else { "" }
-                        );
-                    }
-                    println!(
-                        "R{}: det {} | judge {} | {} repair attempt(s) | root {}",
-                        outcome.det.record.round,
-                        if outcome.det.record.all_pass { "green" } else { "RED" },
-                        if outcome.judged.iter().all(|c| c.judgment.verdict)
-                            && outcome.det.record.all_pass
-                        {
-                            "green"
-                        } else {
-                            "RED"
-                        },
-                        outcome.repair_attempts,
-                        outcome.det.record.root
-                    );
-                    if let Some(record) = &outcome.failure_record {
-                        println!("failure record: {}", record.display());
-                    }
-                    if outcome.green {
-                        println!("ALL PASS (two-phase)");
-                        ExitCode::SUCCESS
-                    } else {
-                        println!("NOT GREEN");
-                        ExitCode::FAILURE
-                    }
-                }
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    ExitCode::from(2)
-                }
-            };
+            return cmd_run_judged(&units_path, &state_path, seed, toolchain, &config);
         }
         Ok(None) => {}
     }
@@ -161,6 +113,54 @@ fn cmd_run(args: &[String]) -> ExitCode {
             );
             if report.record.all_pass {
                 println!("ALL PASS");
+                ExitCode::SUCCESS
+            } else {
+                println!("NOT GREEN");
+                ExitCode::FAILURE
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn cmd_run_judged(
+    units_path: &std::path::Path,
+    state_path: &std::path::Path,
+    seed: u64,
+    toolchain: Option<Hash>,
+    config: &array_test::judge::JudgeConfig,
+) -> ExitCode {
+    match array_test::judge::run_with_judgment(units_path, state_path, seed, toolchain, config) {
+        Ok(outcome) => {
+            for cell in &outcome.judged {
+                println!(
+                    "  judged {:<17} [{}] {} ({}/{} runs{})",
+                    cell.unit_id,
+                    cell.scope.as_str(),
+                    if cell.judgment.verdict { "PASS" } else { "REJECTED" },
+                    cell.judgment.pass_runs,
+                    cell.judgment.total_runs,
+                    if cell.cached { ", cached" } else { "" }
+                );
+            }
+            let judge_green =
+                outcome.det.record.all_pass && outcome.judged.iter().all(|c| c.judgment.verdict);
+            println!(
+                "R{}: det {} | judge {} | {} repair attempt(s) | root {}",
+                outcome.det.record.round,
+                if outcome.det.record.all_pass { "green" } else { "RED" },
+                if judge_green { "green" } else { "RED" },
+                outcome.repair_attempts,
+                outcome.det.record.root
+            );
+            if let Some(record) = &outcome.failure_record {
+                println!("failure record: {}", record.display());
+            }
+            if outcome.green {
+                println!("ALL PASS (two-phase)");
                 ExitCode::SUCCESS
             } else {
                 println!("NOT GREEN");
