@@ -273,6 +273,9 @@ A cell is only cacheable if it's reproducible. Required:
 - **Pinned seeds** for all RNG (incl. property-based generators).
 - **Frozen clock** — injected time source, never `now()`.
 - **No ambient I/O** — network blocked; filesystem is a content-addressed fixture store.
+  *(v1 status, D12/R-g: the runner enforces env hygiene + the meta-check below; actual
+  network/memory isolation is T3b. Until then this bullet is an aspiration the
+  meta-check polices, not a sandbox guarantee — and the docs say so on purpose.)*
 - **Pinned toolchain** — compiler/runtime/deps lockfile hashed into the key.
 - **Ordered iteration** — no hash-set ordering leaks into output.
 - **Single-writer ledger** — confirmations appended in topological order.
@@ -371,6 +374,16 @@ Each sprint = one `R_k`:
 The array and the sprint loop are the same machine viewed at two timescales: the array is
 the data structure, the sprint loop is its update protocol. The repair micro-loop (§4.3) is
 that same machine at a third, smaller timescale — one unit instead of one sprint.
+
+### 9.1 Embedding contract (D11)
+array-test is **library-first and consumer-agnostic**: the core never references
+sprint-loops or any other harness. Integration happens against stable outputs only —
+the all-PASS green gate, `roots/R<k>.json` certificates, the independently
+re-verifiable `confirmations.ndjson` chain, and hash-committed TAP evidence. A
+sprint-loops Test-phase shim (T14) maps those onto `test-report.md` /
+`failure-report.md` and the phase exit condition, entirely on its own side of the
+boundary. Any other application embeds the same way: call the library (or CLI), read
+the certificate, optionally re-verify the chain yourself.
 
 ---
 

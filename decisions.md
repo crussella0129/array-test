@@ -135,3 +135,35 @@ mapped against the architecture.
   meta-check (= flaky-test literature's causes, pinned or banned).
 **Consequence:** The design gained two backlog tiers and several spec clauses without any
 architectural change — the survey confirmed the array's shape and sharpened its edges.
+
+## D11 — Library-first embedding contract; sprint-loops is a consumer, not a dependency (s3)
+**Context:** array-test is intended to power the Test phase of the sprint-loops protocol,
+but must remain standalone — usable by anyone, embeddable in any application.
+**Decision:** One-directional coupling. array-test is a Rust library (plus a thin CLI,
+T11) that never references sprint-loops — no paths, no phase names, no knowledge a
+consumer exists. Consumers integrate against a **stable output contract**: (1) green iff
+the array root is all-PASS; (2) `roots/R<k>.json` round certificates; (3) the
+independently re-verifiable hash-chained `confirmations.ndjson`; (4) hash-committed TAP
+evidence. The sprint-loops Test-phase shim (backlog T14) consumes these and produces
+sprint-loops' own artifacts (`test-report.md`/`failure-report.md`) on its side of the
+boundary.
+**Consequence:** Anyone holding the ledger file can verify the chain and root with zero
+trust in the runner; sprint-loops conventions can change without touching array-test, and
+vice versa.
+**Alternatives rejected:** Building sprint-loops' file conventions into array-test
+(couples every embedder to one consumer's layout); a shared "integration crate" (a second
+thing to version for what a stable file format already does).
+
+## D12 — v1 runner hermeticity level: env hygiene + meta-check, not a sandbox (s3)
+**Context:** ARCHITECTURE.md §6 demands "no ambient I/O", but full isolation (network
+namespaces/seccomp, memory rlimits) is real engineering that shouldn't block the first
+runnable round.
+**Decision:** T3 v1 enforces: cleared environment (declared vars + hygiene set
+`TZ/LC_ALL/SOURCE_DATE_EPOCH` + `ARRAY_TEST_SEED`), no stdin, wall-clock envelope with
+**process-group** kill (killing only the direct child leaves grandchildren running and
+holding pipes), and the run-twice determinism meta-check with ledger-visible quarantine.
+Network and memory isolation are deferred to T3b and recorded as gap **R-g**: until T3b,
+a cell's determinism claim is "meta-checked", not "sandbox-guaranteed".
+**Consequence:** Honest labeling of the guarantee level; the meta-check catches the
+nondeterminism that ambient I/O actually causes, which is the failure mode that matters
+for cache validity.

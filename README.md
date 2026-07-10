@@ -32,6 +32,8 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
 - `sprints/s2/` — closed, green: testing-practice survey (10 topics, adoption map in D10)
   + refactor: domain-separated hashing (D9), filesystem determinism, manifest validation,
   `topo_order()`.
+- `sprints/s3/` — closed, green: embedding contract (D11), hermetic cell runner (T3,
+  v1 isolation level per D12), hash-chained confirmation ledger + array root (T4).
 
 ## Building
 ```
@@ -51,13 +53,22 @@ cargo clippy --all-targets
   [riteway](https://github.com/crussella0129/riteway)'s `given/should/actual/expected` +
   TAP conventions.
 
+## Embedding
+array-test is **library-first and consumer-agnostic** (D11). It is being built to power
+the Test phase of the [sprint-loops](https://github.com/crussella0129/sprint-loops)
+protocol, but the core never references sprint-loops — or any consumer. Integrate against
+the stable outputs: the all-PASS green gate, `roots/R<k>.json` round certificates, the
+independently re-verifiable hash-chained `confirmations.ndjson`, and hash-committed TAP
+evidence. Anyone holding the ledger file can re-verify the chain and root with zero trust
+in the runner.
+
 ## Status
-Sprints **s0 (design)**, **s1 (substrate)**, and **s2 (survey + hardening refactor)** all
-closed green. Implemented and tested (`src/hash.rs`, `src/manifest.rs`, `src/contract.rs`,
-`src/dag.rs`): domain-separated `code_hash`/`cell_key` content addressing (frozen
-`array-test/v1/...` contexts, RFC 6962-style leaf/node prefixes), cross-platform
-deterministic file hashing, validated manifest/contract schemas, and the integration DAG
-resolver (forward closure, reverse impact closure, deterministic `topo_order()`). Next up:
-T3 (hermetic cell runner) + T4 (confirmation ledger / Merkle root) — the first sprint that
-can actually run an `R_k`, at which point the v1 hash contexts freeze for good. See
-`agent-tasks/agent-tasks.md`.
+Sprints **s0 (design)**, **s1 (substrate)**, **s2 (survey + hardening refactor)**, and
+**s3 (runner + ledger)** all closed green — 57 tests. Implemented: domain-separated
+`code_hash`/`cell_key` content addressing (frozen `array-test/v1/...` contexts, RFC
+6962-style leaf/node prefixes), validated manifest/contract schemas, the integration DAG
+resolver (forward/impact closures, deterministic `topo_order()`), the hermetic cell
+runner (cleared env + seed, evidence hashing, wall-clock envelope with process-group
+kill, run-twice determinism meta-check → visible quarantine), and the hash-chained
+confirmation ledger with reproducible array roots. Next up: T5 (frontier selection +
+cache) and T11 (CLI) — the first self-hosted `R_k`. See `agent-tasks/agent-tasks.md`.

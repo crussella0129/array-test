@@ -31,3 +31,15 @@ Append-only completion log (sprint-loops convention).
 - [x] **F5 — Manifest load-time validation.** Empty id / self-dep / duplicate deps.
 - [x] **F6 — `Dag::topo_order()`.** Deterministic deps-before-dependents order.
 - [x] **F7 — Dependency bumps.** petgraph 0.8, thiserror 2, toml 1.
+
+## Sprint s3
+- [x] **T3 — Hermetic cell runner (v1 level, D12).** [Rust] `src/runner.rs`: cleared env
+  + hygiene set + `ARRAY_TEST_SEED`, framed stdout/stderr/exit evidence hashing,
+  wall-clock envelope with process-group kill, run-twice determinism meta-check →
+  visible quarantine. Memory/network isolation deferred to T3b (R-g).
+- [x] **T4 — Confirmation ledger + array root.** [Rust] `src/ledger.rs`: hash-chained
+  append-only ndjson over canonical bytes, full-chain verification, reproducible array
+  root over `{cell_key → det_status}`, `roots/R<k>.json` round certificates.
+  `DetStatus` widened to Pass/Fail/Quarantined/TimedOut (D10 visibility).
+- [x] **Embedding contract (D11).** Library-first; sprint-loops is consumer #1 via
+  stable outputs, never a dependency.

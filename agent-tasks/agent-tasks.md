@@ -7,15 +7,11 @@ Persistent across sprints (sprint-loops convention). Ordered by build dependency
 property tier (T7); TAP as the language-agnostic evidence contract (T6) — riteway is an
 optional adapter for JS units, not a dependency of the core.
 
-## Engine (s3+)
-- [ ] **T3 — Hermetic cell runner.** [Rust] Execute one `(target, scope)` cell under
-  frozen clock / pinned seed / no-I/O; emit `evidence_hash`. Include determinism
-  meta-check (run twice, hashes must match) → quarantine on mismatch. Per D10:
-  quarantine is visible ledger state with a recorded reason (never a silent skip);
-  each scope enforces a resource envelope (wall-clock/memory caps); optional coverage
-  summary recorded as evidence metadata, never a gate.
-- [ ] **T4 — Confirmation ledger.** [Rust] Append-only `confirmations.ndjson`,
-  hash-chained; Merkle root over `{cell_key → det_status}`; `roots/R<k>.json`.
+## Engine (s4+)
+- [ ] **T3b — Full sandbox.** [Rust] Complete the D12/R-g gap: memory caps (rlimits),
+  network isolation (namespaces/seccomp where available), filesystem read scoping.
+  Upgrades a cell's determinism claim from "meta-checked" to "sandbox-guaranteed";
+  the ledger should record which level applied.
 - [ ] **T5 — Frontier selection + cache.** [Rust] Diff `code_hash`es, compute impact
   closure, derive changed `cell_key`s, reuse cached ✓ for the rest. Round cost ∝ frontier.
 
@@ -48,7 +44,10 @@ optional adapter for JS units, not a dependency of the core.
   scoped to the single unit, bounded by a retry budget; escalate to sprint-level
   `failure-report.md` on exhaustion. (ARCHITECTURE.md §4.3.)
 
-## Surface (s2+)
-- [ ] **T11 — CLI + sprint-loop wiring.** [Rust] `array-test run` as a pure function of
-  the tree; wire `R_k` to the sprint Test phase (Phase D then Phase J) and the
-  green-root + judge-confirmed gate to Loop.
+## Surface (s4+)
+- [ ] **T11 — CLI.** [Rust] `array-test run` as a pure function of the tree; the
+  standalone binary an embedder without Rust linkage uses. Consumer-agnostic per D11.
+- [ ] **T14 — sprint-loops Test-phase adapter.** Shim (sprint-loops side, or an adapter
+  doc here) mapping array-test's stable outputs (`roots/R<k>.json`, ledger, green gate)
+  onto sprint-loops artifacts (`test-report.md`/`failure-report.md`, phase exit).
+  One-directional per D11 — array-test never learns sprint-loops exists.

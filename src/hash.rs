@@ -37,6 +37,11 @@ pub mod domain {
     pub const DEPS_LIST: &str = "array-test/v1/deps-list";
     pub const SEED: &str = "array-test/v1/seed";
     pub const CELL_KEY: &str = "array-test/v1/cell-key";
+    pub const EVIDENCE: &str = "array-test/v1/evidence";
+    pub const LEDGER_ENTRY: &str = "array-test/v1/ledger-entry";
+    pub const LEDGER_GENESIS: &str = "array-test/v1/ledger-genesis";
+    pub const ROOT_LEAF: &str = "array-test/v1/root-leaf";
+    pub const ARRAY_ROOT: &str = "array-test/v1/array-root";
 }
 
 /// A blake3 digest.
@@ -85,6 +90,46 @@ impl fmt::Display for Hash {
             write!(f, "{:02x}", b)?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+#[error("invalid hash string: {0}")]
+pub struct ParseHashError(String);
+
+impl std::str::FromStr for Hash {
+    type Err = ParseHashError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let hex = s
+            .strip_prefix("blake3:")
+            .ok_or_else(|| ParseHashError(format!("missing 'blake3:' prefix in {s:?}")))?;
+        if hex.len() != HASH_LEN * 2 {
+            return Err(ParseHashError(format!(
+                "expected {} hex chars, got {}",
+                HASH_LEN * 2,
+                hex.len()
+            )));
+        }
+        let mut bytes = [0u8; HASH_LEN];
+        for (i, byte) in bytes.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16)
+                .map_err(|_| ParseHashError(format!("non-hex characters in {s:?}")))?;
+        }
+        Ok(Hash(bytes))
+    }
+}
+
+impl serde::Serialize for Hash {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Hash {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
     }
 }
 
