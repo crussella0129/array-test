@@ -48,6 +48,8 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
 - `sprints/s9/` — closed, green: review+refactor (findings F8–F16: sentinel hygiene,
   quarantine transparency, ledger-derived rounds, trust model §7.4) + the sequencing
   determination (D20): extension is by sidecar and by value; T15b next.
+- `sprints/s10/` — closed, green: **v1.0.0** — the durable self-host ledger
+  (`selfhost/state`, rot-guarded) froze the `array-test/v1/*` contexts (D21).
 
 ## Building & running
 ```
@@ -92,7 +94,12 @@ See [`examples/quickstart/`](examples/quickstart/) for a runnable two-unit works
 and full verification.
 
 ## Status
-Sprints **s0–s9** all closed green — 107 tests, and the system is **self-hosting**:
+**v1.0.0.** The `array-test/v1/*` hash contexts and all byte layouts are **frozen**
+(D21): the durable ledger at [`selfhost/state`](selfhost/) — array-test certifying
+itself through its own CLI — commits to them permanently, and a rot-guard test audits
+that history on every run. Post-freeze extension is by sidecar and by value (D20).
+
+Sprints **s0–s10** all closed green — 109 tests, and the system is **self-hosting**:
 array-test runs its own test suite as a cell (through the `tap` evidence adapter),
 passes its own determinism meta-check, and certifies a green root over itself — then
 reuses that confirmation on the next round. Under the hood: domain-separated

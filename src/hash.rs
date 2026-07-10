@@ -26,8 +26,11 @@ use thiserror::Error;
 
 pub const HASH_LEN: usize = 32;
 
-/// Frozen derivation contexts. Add new ones freely; never change or remove one that a
-/// ledger has committed to.
+/// Derivation contexts. **FROZEN as of v1.0.0** (D21): the durable ledger at
+/// `selfhost/state` commits to hashes derived under these contexts and the structural
+/// rules of this module (role prefixes, framings, canonical byte layouts). Adding new
+/// contexts remains legal (D20: extension by sidecar and by value); changing or
+/// removing ANY existing context or layout is a re-key event requiring a v2 namespace.
 pub mod domain {
     pub const FILE_PATH: &str = "array-test/v1/file-path";
     pub const FILE_CONTENT: &str = "array-test/v1/file-content";

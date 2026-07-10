@@ -1,0 +1,6 @@
+[io]
+input  = "a state dir"
+output = "exit 0 iff every auditable surface is intact"
+
+[invariants]
+post = ["any flipped ledger byte is detected"]

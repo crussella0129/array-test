@@ -1,0 +1,12 @@
+id = "selfhost.verify"
+version = "1.0.0"
+deps = ["selfhost.run"]
+
+# Closure scope: selfhost.run's code_hash is in this key — verify's meaning depends on
+# what run produces, so a change to run's checks re-runs this cell too.
+[tests.closure]
+command = ["/bin/sh", "src/check.sh"]
+timeout_secs = 120
+
+[tests.closure.env]
+PATH = "../../../target/debug:/usr/local/bin:/usr/bin:/bin"

@@ -327,3 +327,27 @@ append and certificate-write can no longer merge two attempts under one number);
 open-once O(1); `manifest.sprint` optional (D11 polish); audit notes certificate-less
 rounds; ARCHITECTURE §7.4 records the trust model — integrity you verify, truthfulness
 you reproduce (re-run from an empty cache and byte-compare roots).
+
+## D21 — THE v1 FREEZE: the durable ledger exists; version 1.0.0 (s10)
+**Context:** T15b. D9 defined the trigger: the first durable committed ledger freezes
+the `array-test/v1/*` contexts and every structural byte layout.
+**The artifact:** `selfhost/state` — array-test testing itself through its own front
+door. Three units (`selfhost.tap`, `selfhost.run`, `selfhost.verify`) drive the built
+CLI via a **relative PATH entry** (`../../../target/debug`), which is what makes a
+committed workspace machine-independent: exec resolves relative PATH against the
+cell's cwd, and cell keys contain no paths at all. Even the *inner* round's root that
+`selfhost.run` asserts is machine-independent (fixed fixture content, seed 0, sentinel
+toolchain). Two founding rounds are committed: R1 (3 executed) and R2 (3 reused,
+byte-identical root `blake3:70258f45…`), plus cache and evidence store; a rot-guard
+test full-audits the committed state on every CI run, so the past cannot be edited
+without failing the suite.
+**The freeze:** as of this commit, every `array-test/v1/*` context, the 0x00/0x01 role
+prefixes, the evidence framing, and the ledger/judgment/root canonical byte layouts
+are **frozen**. Extension is by sidecar and by value (D20); relayout requires a v2
+namespace and a full re-key. Frozen constants include the per-scope timeout defaults
+(10/30/60/300s).
+**Version: 1.0.0.** 1.0 here *means* the promise: keys stable forever. The deferred
+guarantee tiers (T7b/T8b/T12/T13/T3c) extend against these stable keys per D20.
+**Honest caveats carried:** `toolchain.lock` pins the producing environment's rustc —
+other environments regenerate it (new keys, appended rounds, history unbroken);
+selfhost scripts assume a POSIX Linux userland.

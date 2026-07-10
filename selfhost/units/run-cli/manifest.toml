@@ -1,0 +1,9 @@
+id = "selfhost.run"
+version = "1.0.0"
+
+[tests.unit]
+command = ["/bin/sh", "src/check.sh"]
+timeout_secs = 120
+
+[tests.unit.env]
+PATH = "../../../target/debug:/usr/local/bin:/usr/bin:/bin"

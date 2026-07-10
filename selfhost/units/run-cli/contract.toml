@@ -1,0 +1,6 @@
+[io]
+input  = "a workspace of units"
+output = "a certified round (roots/R<k>.json), exit 0 iff green"
+
+[invariants]
+post = ["unchanged workspace => zero executions and an identical root"]

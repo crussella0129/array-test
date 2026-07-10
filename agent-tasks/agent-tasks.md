@@ -11,10 +11,6 @@ optional adapter for JS units, not a dependency of the core.
 - [ ] **T3c — Filesystem read scoping.** [Rust] The last R-g fragment: bind-mount/
   chroot-style scoping so a cell can only read its declared inputs. (Memory caps and
   network isolation landed s6, D16.)
-- [ ] **T15b — Full self-hosting workspace.** Extend the T15 milestone (one suite,
-  landed s5) to a committed `selfhost/` workspace covering every test suite as units
-  with real deps, producing the first durable ledger — which formally freezes the v1
-  hash contexts (D9, s5 research §5).
 
 
 ## Guarantees (s8+)

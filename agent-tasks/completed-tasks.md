@@ -98,6 +98,11 @@ Append-only completion log (sprint-loops convention).
 - [x] **Quickstart example.** `examples/quickstart/` committed (dep edge, two scopes,
   README walkthrough, judge.toml.example), guarded green by an integration test.
 
+## Sprint s10 (v1.0.0)
+- [x] **T15b — The durable ledger + v1 freeze (D21).** Machine-independent `selfhost/`
+  workspace (relative-PATH CLI cells, scripts in src/); founding rounds R1/R2 committed
+  with byte-identical roots; rot-guard audit test; contexts FROZEN; version 1.0.0.
+
 ## Sprint s9 (review + refactor)
 - [x] **Sequencing determination (D20).** T7b/T8b/T12/T13/T3c are separable from T15b:
   extension is by sidecar and by value, never by relayout. T15b is next.
