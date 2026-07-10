@@ -1,0 +1,6 @@
+[io]
+input  = "name: String"
+output = "String"
+
+[invariants]
+post = ["output starts with 'hello, '"]

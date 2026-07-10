@@ -43,6 +43,8 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
 - `sprints/s7/` — closed, green: guarantee tiers — property tier with real Hypothesis
   (T7), `proved` schema (T8), Phase-J judge gate (T9, D17), repair micro-loop (T10,
   D18), content-addressed evidence store.
+- `sprints/s8/` — closed, green: full-audit verifier (D19 — every root certificate,
+  judgments chain, evidence store) + the committed `examples/quickstart` workspace.
 
 ## Building & running
 ```
@@ -81,8 +83,13 @@ independently re-verifiable hash-chained `confirmations.ndjson`, and hash-commit
 evidence. Anyone holding the ledger file can re-verify the chain and root with zero trust
 in the runner.
 
+## Quickstart
+See [`examples/quickstart/`](examples/quickstart/) for a runnable two-unit workspace
+(guarded green by the test suite) demonstrating rounds, caching, the backwards arrow,
+and full verification.
+
 ## Status
-Sprints **s0–s7** all closed green — 98 tests, and the system is **self-hosting**:
+Sprints **s0–s8** all closed green — 103 tests, and the system is **self-hosting**:
 array-test runs its own test suite as a cell (through the `tap` evidence adapter),
 passes its own determinism meta-check, and certifies a green root over itself — then
 reuses that confirmation on the next round. Under the hood: domain-separated

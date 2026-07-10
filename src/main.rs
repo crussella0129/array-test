@@ -2,8 +2,7 @@
 //! this binary is what an embedder without Rust linkage drives).
 
 use array_test::hash::Hash;
-use array_test::ledger::{array_root, load_and_verify, RootRecord};
-use array_test::round::{run_round, StatePaths};
+use array_test::round::run_round;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -200,48 +199,27 @@ fn cmd_verify(args: &[String]) -> ExitCode {
     let Some(state) = arg_value(args, "--state") else {
         return fail("verify requires --state <dir>");
     };
-    let paths = StatePaths::new(&PathBuf::from(state));
 
-    let entries = match load_and_verify(&paths.ledger_file) {
-        Ok(entries) => entries,
-        Err(e) => {
-            eprintln!("ledger verification FAILED: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-    println!("ledger: {} entries, chain intact", entries.len());
+    // Full audit (D19): confirmations chain, every root certificate, judgments chain,
+    // evidence store. Problems are integrity violations; notes are informational —
+    // never mixed, so success can't read as failure or vice versa.
+    let report = array_test::audit::full_audit(&PathBuf::from(state));
 
-    let latest_round = entries.iter().map(|e| e.round).max();
-    let Some(round) = latest_round else {
-        println!("ledger empty; nothing further to verify");
-        return ExitCode::SUCCESS;
-    };
-    let round_entries: Vec<_> = entries
-        .iter()
-        .filter(|e| e.round == round)
-        .cloned()
-        .collect();
-    let recomputed = array_root(&round_entries);
-
-    let root_path = paths.roots_dir.join(format!("R{round}.json"));
-    match RootRecord::read(&root_path) {
-        Ok(record) if record.root == recomputed => {
-            println!(
-                "R{round}: root matches ledger ({}), all_pass={}",
-                record.root, record.all_pass
-            );
-            ExitCode::SUCCESS
+    println!(
+        "audit: {} confirmations, {} root certificate(s), {} judgment(s), {} evidence file(s)",
+        report.confirmations, report.roots_checked, report.judgments, report.evidence_files
+    );
+    for note in &report.notes {
+        println!("note: {note}");
+    }
+    if report.clean() {
+        println!("VERIFIED");
+        ExitCode::SUCCESS
+    } else {
+        for problem in &report.problems {
+            eprintln!("PROBLEM: {problem}");
         }
-        Ok(record) => {
-            eprintln!(
-                "root MISMATCH for R{round}: certificate {} vs ledger {}",
-                record.root, recomputed
-            );
-            ExitCode::FAILURE
-        }
-        Err(e) => {
-            eprintln!("cannot read root certificate {}: {e}", root_path.display());
-            ExitCode::FAILURE
-        }
+        eprintln!("verification FAILED ({} problem(s))", report.problems.len());
+        ExitCode::FAILURE
     }
 }

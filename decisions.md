@@ -277,3 +277,25 @@ exhausted (or no repair configured) → consumer-agnostic failure record
 sprint-loops' `failure-report.md`).
 **Consequence:** §4.3's "the micro-loop is a local fixed-point search, not a separate
 code path" turned out to be literally implementable: the loop body is `run_round`.
+
+## D19 — Verify everything: the full audit is a library function (s8)
+**Context:** `verify` had fallen behind the state it guards — it checked the
+confirmations chain and the latest root while judgments, older roots, and the evidence
+store went unaudited. Separately, a dev-loop shell "failure" (a `grep -c` pipeline
+exiting 1 on a count of 0 — i.e., failing precisely because everything passed) supplied
+the doctrine: **success must never read as failure**, the dual of D14's "silence never
+reads as success". Exit semantics are consumer contract surface.
+**Decision:** `audit::full_audit(state_dir)` — library-first (D11: embedders get the
+trust tool; the CLI's `verify` is one caller) — checks the confirmations chain, EVERY
+root certificate (root, cells, all_pass recomputed from that round's entries),
+the judgments chain, and the evidence store (every file re-hashed against its content
+address). Integrity violations (`problems`, nonzero exit) are strictly separated from
+informational `notes` (e.g. quarantined/skipped evidence legitimately absent from the
+store) — the two never mix, in either direction.
+**Also:** `examples/quickstart/` committed as the D11 adoption surface — a real
+two-unit workspace with a walkthrough README and a `judge.toml.example`, guarded by an
+integration test so the example cannot rot silently.
+**Test-fixture lesson recorded:** a tamper test tried to "forge" R1's `all_pass` from
+false to true and found it already true — correctly, because the judge (not det) had
+rejected that round and certificates are Phase-D-only by design (D7). The forgery that
+matters is the root hash itself; the test now flips that.

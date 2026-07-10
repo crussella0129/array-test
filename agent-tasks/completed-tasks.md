@@ -89,3 +89,11 @@ Append-only completion log (sprint-loops convention).
   budget + escalation failure record. Converges in tests; escalates with audit refs.
 - [x] **Evidence store.** Executed cells persist exact framed evidence bytes,
   content-addressed and re-hashable against the ledger.
+
+## Sprint s8
+- [x] **T16 — Full-audit verifier (D19).** `audit::full_audit` as a library:
+  confirmations chain, every root certificate, judgments chain, evidence store;
+  problems vs notes strictly separated; CLI `verify` rewired; tamper detection proven
+  for each surface.
+- [x] **Quickstart example.** `examples/quickstart/` committed (dep edge, two scopes,
+  README walkthrough, judge.toml.example), guarded green by an integration test.
