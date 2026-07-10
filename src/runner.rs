@@ -114,14 +114,21 @@ pub struct Evidence {
 }
 
 impl Evidence {
-    pub fn hash(&self) -> Hash {
+    /// The canonical framed encoding — the exact bytes `evidence_hash` covers, and the
+    /// exact bytes the evidence store persists (s7 §2.5): anyone can re-hash the stored
+    /// file and check it against the ledger.
+    pub fn framed(&self) -> Vec<u8> {
         let mut framed = Vec::with_capacity(self.stdout.len() + self.stderr.len() + 25);
         framed.extend_from_slice(&(self.stdout.len() as u64).to_le_bytes());
         framed.extend_from_slice(&self.stdout);
         framed.extend_from_slice(&(self.stderr.len() as u64).to_le_bytes());
         framed.extend_from_slice(&self.stderr);
         framed.extend_from_slice(&(self.exit_code.unwrap_or(i32::MIN) as i64).to_le_bytes());
-        Hash::leaf(domain::EVIDENCE, &framed)
+        framed
+    }
+
+    pub fn hash(&self) -> Hash {
+        Hash::leaf(domain::EVIDENCE, &self.framed())
     }
 }
 

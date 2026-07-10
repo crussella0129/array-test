@@ -4,6 +4,7 @@
 pub mod contract;
 pub mod dag;
 pub mod hash;
+pub mod judge;
 pub mod ledger;
 pub mod manifest;
 pub mod round;

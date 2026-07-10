@@ -19,7 +19,7 @@ use crate::dag::{Dag, DagError};
 use crate::hash::{
     compute_cell_key, compute_code_hash, domain, CellKeyInputs, CellScope, CodeHashError, Hash,
 };
-use crate::ledger::{DetStatus, Ledger, LedgerEntry, LedgerError, RootRecord};
+use crate::ledger::{DetStatus, Guarantee, Ledger, LedgerEntry, LedgerError, RootRecord};
 use crate::manifest::{load_manifest, Manifest, ManifestError, TestSpec};
 use crate::runner::{run_cell_checked, CellSpec, RunError, RunStatus, Verdict};
 use serde::{Deserialize, Serialize};
@@ -144,13 +144,24 @@ fn test_def_hash(spec: &TestSpec, scope: CellScope) -> Hash {
             .to_le_bytes(),
     );
     bytes.extend_from_slice(&spec.mem_limit_mb.unwrap_or(0).to_le_bytes());
+    bytes.push(guarantee_of(spec).byte());
     Hash::leaf(domain::TEST_DEF, &bytes)
+}
+
+/// Map the validated declaration to its enum (default `example`, §7.2).
+pub fn guarantee_of(spec: &TestSpec) -> Guarantee {
+    match spec.guarantee.as_deref() {
+        Some("property") => Guarantee::Property,
+        Some("proved") => Guarantee::Proved,
+        _ => Guarantee::Example,
+    }
 }
 
 #[derive(Debug)]
 pub struct CellPlan {
     pub unit_id: String,
     pub scope: CellScope,
+    pub guarantee: Guarantee,
     pub spec: CellSpec,
 }
 
@@ -217,6 +228,7 @@ pub fn plan_round(ws: &Workspace, seed: u64, toolchain_hash: Hash) -> Vec<CellPl
             plans.push(CellPlan {
                 unit_id: id.clone(),
                 scope,
+                guarantee: guarantee_of(test),
                 spec: CellSpec {
                     cell_key,
                     command: test.command.clone(),
@@ -275,6 +287,7 @@ pub struct CellReport {
     pub scope: CellScope,
     pub cell_key: Hash,
     pub det_status: DetStatus,
+    pub evidence_hash: Hash,
     pub kind: CellOutcomeKind,
 }
 
@@ -323,6 +336,12 @@ pub struct StatePaths {
     pub ledger_file: PathBuf,
     pub roots_dir: PathBuf,
     pub cache_dir: PathBuf,
+    /// Content-addressed evidence store: `<evidence_hash>.tap` (s7 research §2.5).
+    pub evidence_dir: PathBuf,
+    pub judgments_file: PathBuf,
+    pub critiques_dir: PathBuf,
+    pub judge_cache_dir: PathBuf,
+    pub failures_dir: PathBuf,
 }
 
 impl StatePaths {
@@ -331,6 +350,11 @@ impl StatePaths {
             ledger_file: state_dir.join("ledger").join("confirmations.ndjson"),
             roots_dir: state_dir.join("ledger").join("roots"),
             cache_dir: state_dir.join("cache"),
+            evidence_dir: state_dir.join("evidence"),
+            judgments_file: state_dir.join("ledger").join("judgments.ndjson"),
+            critiques_dir: state_dir.join("ledger").join("critiques"),
+            judge_cache_dir: state_dir.join("judge-cache"),
+            failures_dir: state_dir.join("ledger").join("failures"),
         }
     }
 
@@ -352,6 +376,24 @@ impl StatePaths {
             .map(|max| max + 1)
             .unwrap_or(1)
     }
+}
+
+/// Write an executed cell's evidence bytes under their hash (content-addressed store).
+fn store_evidence(
+    evidence_dir: &Path,
+    outcome: &crate::runner::RunOutcome,
+) -> Result<(), RoundError> {
+    fs::create_dir_all(evidence_dir).map_err(|source| RoundError::Io {
+        path: evidence_dir.to_path_buf(),
+        source,
+    })?;
+    let path = evidence_dir.join(format!("{}.evidence", outcome.evidence_hash.hex()));
+    if path.exists() {
+        return Ok(()); // content-addressed: same hash, same bytes
+    }
+    // Exactly the framed bytes the hash covers — re-hashable by any verifier.
+    fs::write(&path, outcome.evidence.framed())
+        .map_err(|source| RoundError::Io { path, source })
 }
 
 fn now_unix_secs() -> u64 {
@@ -427,6 +469,9 @@ pub fn run_round(
                                 RunStatus::Fail { .. } => DetStatus::Fail,
                                 RunStatus::TimedOut => DetStatus::TimedOut,
                             };
+                            // Evidence store (s7 §2.5): the root must be backed by
+                            // retrievable bytes, not hashes of discarded data.
+                            store_evidence(&paths.evidence_dir, &outcome)?;
                             (status, outcome.evidence_hash)
                         }
                         Verdict::Quarantined { first, .. } => (DetStatus::Quarantined, first),
@@ -460,6 +505,7 @@ pub fn run_round(
             ts,
             kind == CellOutcomeKind::Reused,
             isolation,
+            plan.guarantee,
         )?;
         round_entries.push(entry);
         cells.push(CellReport {
@@ -467,6 +513,7 @@ pub fn run_round(
             scope: plan.scope,
             cell_key: plan.spec.cell_key,
             det_status,
+            evidence_hash,
             kind,
         });
     }

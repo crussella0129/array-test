@@ -40,6 +40,9 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
   self-hosting milestone (T15): array-test certifies its own test suite.
 - `sprints/s6/` — closed, green: scope ladder (T5b, D15), sandbox with recorded
   isolation levels (T3b, D16), toolchain.lock pinning (R-h closed).
+- `sprints/s7/` — closed, green: guarantee tiers — property tier with real Hypothesis
+  (T7), `proved` schema (T8), Phase-J judge gate (T9, D17), repair micro-loop (T10,
+  D18), content-addressed evidence store.
 
 ## Building & running
 ```
@@ -79,7 +82,7 @@ evidence. Anyone holding the ledger file can re-verify the chain and root with z
 in the runner.
 
 ## Status
-Sprints **s0–s6** all closed green — 90 tests, and the system is **self-hosting**:
+Sprints **s0–s7** all closed green — 98 tests, and the system is **self-hosting**:
 array-test runs its own test suite as a cell (through the `tap` evidence adapter),
 passes its own determinism meta-check, and certifies a green root over itself — then
 reuses that confirmation on the next round. Under the hood: domain-separated
@@ -92,6 +95,11 @@ orchestrator (unchanged round ⇒ zero executions and a byte-identical root; a c
 dependency ⇒ exactly the keys whose scope covers it re-run), the full scope ladder
 (`[tests.unit|direct|closure|e2e]` with fail-fast tiers and ledger-visible Skipped),
 the sandbox (memory caps, per-cell network namespaces where the host allows, isolation
-level recorded per confirmation), `toolchain.lock` pinning, and the `run` / `verify` /
-`tap` CLI. Next up (s7): the guarantee tiers — Hypothesis property tier, Kani formal
-tier, and the Phase-J judge gate + repair micro-loop. See `agent-tasks/agent-tasks.md`.
+level recorded per confirmation), `toolchain.lock` pinning, the guarantee tiers
+(declared `example|property|proved` levels — with a real derandomized Hypothesis
+property cell passing the meta-check), the **two-phase confirmation gate** (`judge.toml`
+→ an N-runs-vs-threshold judge command with hash-chained `judgments.ndjson`, critique
+transcripts, and verdicts cached by `(cell_key, judge_hash)`), the **repair micro-loop**
+(a rejected unit is patched from its critique and the next attempt is simply another
+round — the frontier re-runs exactly what moved), a content-addressed re-hashable
+evidence store, and the `run` / `verify` / `tap` CLI. See `agent-tasks/agent-tasks.md`.

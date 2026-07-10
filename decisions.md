@@ -241,3 +241,39 @@ content is identical work — but fixture authors (and future doc readers) shoul
   mechanism level.
 **Remaining gap:** filesystem read scoping — the last R-g fragment; the meta-check
 polices what the sandbox doesn't block.
+
+## D17 — Phase J: the judge is a command; judgments get confirmation economics (s7)
+**Context:** T9 lands D7's judge gate. An LLM judge needs network and is not
+bit-deterministic — exactly what the det root excludes.
+**Decision:**
+- The judge is a **command** (`judge.toml`: command/runs/threshold/min_rating),
+  receiving `ARRAY_TEST_UNIT_DIR/_UNIT_ID/_SCOPE/_EVIDENCE/_CONTRACT`, writing a
+  critique to stdout whose last line is `rating: <0-100>`. Scripted judges make the
+  protocol testable without an LLM; an LLM judge is just a different command.
+- Judge identity is pinned: `judge_hash` over command+config (R-f) — a changed prompt
+  is a new judge.
+- **Judgments get the same content-addressed economics as confirmations:** verdicts
+  cached by `(cell_key, judge_hash)` (unchanged cell + unchanged judge = no re-judging),
+  recorded in their own hash-chained `judgments.ndjson` with critique transcripts under
+  `ledger/critiques/` — audited, never rooted (§7.3 upheld).
+- Phase J runs only over a det-green round; only det-Pass cells are judged (§4.2).
+- **Guarantee levels** (`example|property|proved`) are declarations: hashed into
+  `test_def_hash` (a changed claim re-keys), recorded per confirmation, audited by
+  Phase J — never "verified" by the engine, which cannot.
+- **Evidence store** (audit gap found during design): executed cells persist their
+  exact framed evidence bytes content-addressed under `state/evidence/` — a root is now
+  backed by retrievable, re-hashable evidence, not hashes of discarded data.
+**T8 note:** `proved` ships as schema; running Kani is environment-gated → T8b.
+
+## D18 — The repair micro-loop is just more rounds (s7)
+**Context:** T10 lands §4.3.
+**Decision:** On judge rejection, the repair command (`[repair]` in judge.toml,
+receiving `ARRAY_TEST_UNIT_DIR` + `ARRAY_TEST_CRITIQUE`) edits the unit; the next
+attempt is simply **another det round** — the changed unit re-keys, the frontier re-runs
+exactly what moved, Phase J re-judges only moved keys (cache handles the rest). Attempts
+are ordinary numbered rounds in history; no special loop state exists anywhere. Budget
+exhausted (or no repair configured) → consumer-agnostic failure record
+`ledger/failures/R<k>-judgment.md` with critique refs (T14's shim can translate it to
+sprint-loops' `failure-report.md`).
+**Consequence:** §4.3's "the micro-loop is a local fixed-point search, not a separate
+code path" turned out to be literally implementable: the loop body is `run_round`.

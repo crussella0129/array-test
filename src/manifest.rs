@@ -40,7 +40,13 @@ pub struct TestSpec {
     pub timeout_secs: Option<u64>,
     /// Opt-in memory cap (RLIMIT_AS) in megabytes (T3b).
     pub mem_limit_mb: Option<u64>,
+    /// Declared guarantee level: `example` (default) | `property` | `proved` (§7.2).
+    /// A declaration the engine records and Phase J audits — not something the engine
+    /// can verify (D17/s7 research §2.1). Changing it re-keys the cell.
+    pub guarantee: Option<String>,
 }
+
+pub const VALID_GUARANTEES: &[&str] = &["example", "property", "proved"];
 
 #[derive(Debug, Error)]
 pub enum ManifestError {
@@ -90,6 +96,15 @@ impl Manifest {
             }
             if spec.command.is_empty() {
                 return Err(format!("tests.{scope}.command must be non-empty"));
+            }
+        }
+        for spec in self.test.iter().chain(self.tests.values()) {
+            if let Some(g) = &spec.guarantee {
+                if !VALID_GUARANTEES.contains(&g.as_str()) {
+                    return Err(format!(
+                        "unknown guarantee '{g}' (expected one of: example, property, proved)"
+                    ));
+                }
             }
         }
         if self.test.is_some() && self.tests.contains_key("closure") {

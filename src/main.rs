@@ -73,13 +73,70 @@ fn cmd_run(args: &[String]) -> ExitCode {
         },
     };
 
-    match run_round(
-        &PathBuf::from(units),
-        &PathBuf::from(state),
-        round,
-        seed,
-        toolchain,
-    ) {
+    // Phase J (D7/D17): opt-in via <units>/judge.toml. The judged path owns its own
+    // round loop (repair attempts are rounds), so --round is det-only.
+    let units_path = PathBuf::from(&units);
+    let state_path = PathBuf::from(&state);
+    match array_test::judge::load_judge_config(&units_path) {
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::from(2);
+        }
+        Ok(Some(config)) => {
+            return match array_test::judge::run_with_judgment(
+                &units_path,
+                &state_path,
+                seed,
+                toolchain,
+                &config,
+            ) {
+                Ok(outcome) => {
+                    for cell in &outcome.judged {
+                        println!(
+                            "  judged {:<17} [{}] {} ({}/{} runs{})",
+                            cell.unit_id,
+                            cell.scope.as_str(),
+                            if cell.judgment.verdict { "PASS" } else { "REJECTED" },
+                            cell.judgment.pass_runs,
+                            cell.judgment.total_runs,
+                            if cell.cached { ", cached" } else { "" }
+                        );
+                    }
+                    println!(
+                        "R{}: det {} | judge {} | {} repair attempt(s) | root {}",
+                        outcome.det.record.round,
+                        if outcome.det.record.all_pass { "green" } else { "RED" },
+                        if outcome.judged.iter().all(|c| c.judgment.verdict)
+                            && outcome.det.record.all_pass
+                        {
+                            "green"
+                        } else {
+                            "RED"
+                        },
+                        outcome.repair_attempts,
+                        outcome.det.record.root
+                    );
+                    if let Some(record) = &outcome.failure_record {
+                        println!("failure record: {}", record.display());
+                    }
+                    if outcome.green {
+                        println!("ALL PASS (two-phase)");
+                        ExitCode::SUCCESS
+                    } else {
+                        println!("NOT GREEN");
+                        ExitCode::FAILURE
+                    }
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    ExitCode::from(2)
+                }
+            };
+        }
+        Ok(None) => {}
+    }
+
+    match run_round(&units_path, &state_path, round, seed, toolchain) {
         Ok(report) => {
             for cell in &report.cells {
                 println!(

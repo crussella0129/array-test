@@ -74,3 +74,18 @@ Append-only completion log (sprint-loops convention).
   isolation level recorded per confirmation in the chained ledger. FS scoping → T3c.
 - [x] **R-h — Toolchain pinning mechanism (D16).** explicit `--toolchain-hash` >
   `toolchain.lock` bytes > unpinned sentinel; lock changes re-key the workspace.
+
+## Sprint s7
+- [x] **T7 — Property tier + guarantee levels (D17).** `guarantee =
+  example|property|proved` validated, hashed into test_def, recorded per confirmation;
+  real Hypothesis property cell (derandomized) passes the meta-check hermetically.
+- [x] **T8 — `proved` schema.** Recorded + audited; live Kani → T8b.
+- [x] **T9 — Phase-J judge gate (D17).** `judge.toml` command protocol (critique +
+  `rating: N`), N runs vs threshold, judge_hash identity pinning, hash-chained
+  `judgments.ndjson` + critique transcripts, verdicts cached by (cell_key, judge_hash),
+  det-red short-circuit, two-phase AND gate in report + CLI exit.
+- [x] **T10 — Repair micro-loop (D18).** Repair command driven by the critique; each
+  attempt is an ordinary det round (frontier re-runs exactly what the repair touched);
+  budget + escalation failure record. Converges in tests; escalates with audit refs.
+- [x] **Evidence store.** Executed cells persist exact framed evidence bytes,
+  content-addressed and re-hashable against the ledger.

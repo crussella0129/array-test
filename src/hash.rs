@@ -46,6 +46,9 @@ pub mod domain {
     pub const LEDGER_GENESIS: &str = "array-test/v1/ledger-genesis";
     pub const ROOT_LEAF: &str = "array-test/v1/root-leaf";
     pub const ARRAY_ROOT: &str = "array-test/v1/array-root";
+    pub const JUDGE: &str = "array-test/v1/judge";
+    pub const JUDGMENT_ENTRY: &str = "array-test/v1/judgment-entry";
+    pub const JUDGMENT_GENESIS: &str = "array-test/v1/judgment-genesis";
 }
 
 /// A blake3 digest.

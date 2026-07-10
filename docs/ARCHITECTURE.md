@@ -337,15 +337,20 @@ however well-audited, masquerade as a reproducible proof.
 ## 8. On-disk layout (the state machine)
 
 ```
-array/
-  units/<id>/...                      # §1.1
-  dag.json                            # resolved integration DAG (computed)
+<units-dir>/
+  <unit-id>/...                       # §1.1 (manifest, contract, src, tests)
+  judge.toml                          # optional: Phase J config (D17)
+  toolchain.lock                      # optional: toolchain pin (D16)
+<state-dir>/
   ledger/
     confirmations.ndjson              # append-only, hash-chained (§7.1) — det_status
     judgments.ndjson                  # append-only, hash-chained (§7.3) — judge verdicts
     critiques/<cell_key>/<n>.md        # judge transcripts (critique_ref targets)
     roots/R<k>.json                   # certified root per round (Phase D only)
+    failures/R<k>-judgment.md         # escalation records (§4.3, D18)
   cache/<cell_key>.json               # memoized confirmations (✓ reuse)
+  judge-cache/<cell_key>-<judge>.json # memoized verdicts (D17)
+  evidence/<evidence_hash>.evidence   # content-addressed evidence store (re-hashable)
 ```
 
 The CLI is a pure function of this tree: `array-test run` reads `units/` + `ledger/`,

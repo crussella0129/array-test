@@ -47,6 +47,27 @@ impl DetStatus {
     }
 }
 
+/// Declared guarantee level of the cell's test (§7.2, D17): what kind of claim a Pass
+/// makes. Recorded, not verified — Phase J audits declarations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Guarantee {
+    #[default]
+    Example,
+    Property,
+    Proved,
+}
+
+impl Guarantee {
+    pub fn byte(self) -> u8 {
+        match self {
+            Guarantee::Example => 0,
+            Guarantee::Property => 1,
+            Guarantee::Proved => 2,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LedgerEntry {
     pub seq: u64,
@@ -62,10 +83,13 @@ pub struct LedgerEntry {
     /// which confirmations were inherited.
     #[serde(default)]
     pub reused: bool,
-    /// The isolation level the runner actually applied (D12/D16) — the guarantee level
+    /// The isolation level the runner actually applied (D12/D16) — the hermeticity
     /// this confirmation was earned under. Inside the chain hash.
     #[serde(default = "default_isolation")]
     pub isolation: crate::runner::IsolationLevel,
+    /// The declared guarantee level of the test (§7.2, D17). Inside the chain hash.
+    #[serde(default)]
+    pub guarantee: Guarantee,
     pub prev: Hash,
     pub entry_hash: Hash,
 }
@@ -93,9 +117,10 @@ fn canonical_bytes(
     ts: u64,
     reused: bool,
     isolation: crate::runner::IsolationLevel,
+    guarantee: Guarantee,
     prev: &Hash,
 ) -> Vec<u8> {
-    let mut out = Vec::with_capacity(8 + 4 + 32 + 1 + 32 + 8 + 1 + 1 + 32);
+    let mut out = Vec::with_capacity(8 + 4 + 32 + 1 + 32 + 8 + 1 + 1 + 1 + 32);
     out.extend_from_slice(&seq.to_le_bytes());
     out.extend_from_slice(&round.to_le_bytes());
     out.extend_from_slice(cell_key.as_bytes());
@@ -104,6 +129,7 @@ fn canonical_bytes(
     out.extend_from_slice(&ts.to_le_bytes());
     out.push(reused as u8);
     out.push(isolation_byte(isolation));
+    out.push(guarantee.byte());
     out.extend_from_slice(prev.as_bytes());
     out
 }
@@ -173,11 +199,12 @@ impl Ledger {
             ts,
             false,
             crate::runner::IsolationLevel::EnvOnly,
+            Guarantee::Example,
         )
     }
 
-    /// Append one confirmation, marking whether it was inherited from the cache (D13)
-    /// and the isolation level it was earned under (D16).
+    /// Append one confirmation, marking whether it was inherited from the cache (D13),
+    /// the isolation level it was earned under (D16), and its declared guarantee (D17).
     #[allow(clippy::too_many_arguments)]
     pub fn append_entry(
         &mut self,
@@ -188,6 +215,7 @@ impl Ledger {
         ts: u64,
         reused: bool,
         isolation: crate::runner::IsolationLevel,
+        guarantee: Guarantee,
     ) -> Result<LedgerEntry, LedgerError> {
         let seq = self.next_seq;
         let prev = self.last_hash;
@@ -202,6 +230,7 @@ impl Ledger {
                 ts,
                 reused,
                 isolation,
+                guarantee,
                 &prev,
             ),
         );
@@ -214,6 +243,7 @@ impl Ledger {
             ts,
             reused,
             isolation,
+            guarantee,
             prev,
             entry_hash,
         };
@@ -283,6 +313,7 @@ pub fn load_and_verify(path: &Path) -> Result<Vec<LedgerEntry>, LedgerError> {
                 entry.ts,
                 entry.reused,
                 entry.isolation,
+                entry.guarantee,
                 &entry.prev,
             ),
         );
