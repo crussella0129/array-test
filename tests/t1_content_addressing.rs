@@ -268,6 +268,31 @@ fn given_a_manifest_with_an_empty_id_should_be_rejected() {
 }
 
 #[test]
+fn given_a_manifest_with_an_unknown_scope_should_fail_to_parse() {
+    // F2: scope keys are typed as CellScope, so `[tests.galactic]` is rejected by the
+    // deserializer — no hand-rolled VALID_SCOPES check. The valid four still load.
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("manifest.toml");
+    fs::write(
+        &path,
+        "id = \"u.a\"\nversion = \"0.1.0\"\n[tests.galactic]\ncommand = [\"/bin/true\"]\n",
+    )
+    .unwrap();
+    assert!(load_manifest(&path).is_err());
+
+    for scope in ["unit", "direct", "closure", "e2e"] {
+        fs::write(
+            &path,
+            format!(
+                "id = \"u.a\"\nversion = \"0.1.0\"\n[tests.{scope}]\ncommand = [\"/bin/true\"]\n"
+            ),
+        )
+        .unwrap();
+        assert!(load_manifest(&path).is_ok(), "scope {scope} should load");
+    }
+}
+
+#[test]
 fn given_a_manifest_whose_id_could_traverse_the_filesystem_should_be_rejected() {
     // F18: the id reaches path construction (mutation work dirs), so a separator, `..`,
     // leading dot, or absolute-looking id must be refused at load time.

@@ -18,6 +18,7 @@
 //! this module) is a re-key event — a new version namespace and a full re-confirmation
 //! of the array. See decisions.md D9.
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
 use std::io;
@@ -281,7 +282,14 @@ pub fn compute_code_hash(unit_dir: &Path) -> Result<Hash, CodeHashError> {
 /// are unchanged — this pins intent and forbids a future reorder from silently moving a
 /// cell key. The rot-guard test (`t15b_durable`) confirms the durable ledger still
 /// verifies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// The `Serialize`/`Deserialize` here address the *manifest wire form* — `[tests.<scope>]`
+/// keys parse straight into this domain type, so an unknown scope is rejected by the
+/// deserializer, not a hand-rolled `VALID_SCOPES` check (F2). The `rename_all` maps the
+/// variants to their canonical lowercase names (`E2e` → `e2e`). This does **not** touch the
+/// frozen layout: only `scope as u8` is ever hashed (see [`compute_cell_key`]); the string
+/// form is manifest sugar and never enters a key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 #[repr(u8)]
 pub enum CellScope {
     Unit = 0,

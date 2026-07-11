@@ -215,7 +215,7 @@ pub fn plan_round(ws: &Workspace, seed: u64, toolchain_hash: Hash) -> Vec<CellPl
             let test = if scope == CellScope::Closure && unit.manifest.test.is_some() {
                 unit.manifest.test.as_ref()
             } else {
-                unit.manifest.tests.get(scope.as_str())
+                unit.manifest.tests.get(&scope)
             };
             let Some(test) = test else { continue };
 

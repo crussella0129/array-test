@@ -542,3 +542,25 @@ the premise corrections so the divergence from the plan is auditable.
   namespace; the precondition is a contract the sandbox upholds, uncheckable here).
 **Coverage:** new tests — id-traversal rejection (manifest) and `safe_state_path`
 accept/reject (judge unit test). 129 pass / 3 ignored; zero frozen surfaces touched.
+
+## D30 — Enum-ify the manifest scope keys: make an unknown scope unrepresentable, not merely rejected (s18, F2)
+**Context:** `Manifest.tests` was `BTreeMap<String, TestSpec>`, validated at load against a
+`VALID_SCOPES` string slice; `round.rs` then re-looked-up each `CellScope` by
+`scope.as_str()`. Two representations of the same closed set (the string map and the
+`CellScope` enum) with a hand-rolled bridge between them.
+**Decision:** Type the map key as `CellScope` directly (`BTreeMap<CellScope, TestSpec>`).
+`CellScope` gains `Serialize`/`Deserialize` with `#[serde(rename_all = "lowercase")]`, so
+`[tests.unit|direct|closure|e2e]` parse straight into the domain type and `[tests.galactic]`
+is a **parse error** from the deserializer — the `VALID_SCOPES` const and its validation
+loop are deleted. `round.rs` drops the string round-trip (`tests.get(&scope)`).
+**Freeze safety (the load-bearing check):** this touches `hash.rs`, a frozen module, but
+changes *nothing hashed*. Only `scope as u8` ever enters a `cell_key` (`compute_cell_key`),
+and the four discriminants (0..3) are unchanged; the string form is manifest sugar that
+never reaches a key. The rot guard (`t15b_durable`) passing is the witness that the durable
+ledger still verifies byte-for-byte.
+**Coverage:** a manifest-layer test pins the new behavior (unknown scope fails to parse; the
+four valid scopes load); the existing `t5b` load-rejection test still holds. 130 pass / 3
+ignored; clippy -D warnings + fmt clean.
+**Note:** kept the `BTreeMap<CellScope, _>` shape rather than a struct-of-`Option`s — the map
+preserves every call site's `.get`/`.values`/`.is_empty` semantics for a smaller, obviously
+byte-neutral diff, and `toml` deserializes enum map keys cleanly.
