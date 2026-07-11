@@ -1,0 +1,16 @@
+id = "contract-audit"
+version = "1.0.0"
+deps = ["greeting", "announcer"]
+
+# T7b, the contract tier as D20 determined it: enforcement is a COMMAND inside
+# test_def — this cell checks that its dependencies' contract.toml post-invariants
+# actually hold, and re-runs whenever any of them (or their contracts) change, because
+# contracts are inside code_hash and this is a closure-scope cell.
+[tests.closure]
+command = ["/bin/sh", "src/check-contracts.sh"]
+
+# T3c/D25 note: on hosts that support mount namespaces you can add
+#   [tests.closure.env]
+#   ARRAY_TEST_FS_READONLY = "1"
+# to run a checker like this with the whole filesystem read-only (fail-closed).
+# Omitted here so the example stays portable to unprivileged CI runners.

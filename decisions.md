@@ -422,3 +422,24 @@ s4. A fuzz corpus IS a fixture set (s2 §2.6).
   own cache). Sidecar `fuzz.ndjson` + contexts + audit coverage; `fuzz` CLI verb.
 **Proven by test:** a finding grows the corpus and flips the next round red until the
 bug is fixed; clean units cache; tampered entries break the chain.
+
+## D25 — Declared env is the per-test extension channel; opt-in read-only cells (s14)
+**Context:** T3c wanted a per-test flag, but appending a field to `test_def`'s
+canonical bytes is a relayout of a frozen surface — forbidden by D21. The freeze
+showed its teeth, and the answer was already in the layout: **declared env is hashed
+into `test_def`**, making it the open per-test key-value extension channel that was
+there all along. Engine-recognized flags live under `ARRAY_TEST_*` names.
+**T3c:** a cell declaring `ARRAY_TEST_FS_READONLY = "1"` runs in a fresh private mount
+namespace with `mount_setattr(AT_RECURSIVE, RDONLY)` flipping every mount read-only —
+fail-closed per D16 (declared-but-unsupported ⇒ the cell does not run), probe-gated
+(`fs_readonly_supported()`), propagation made private so nothing leaks to the host.
+Proven live: writes fail everywhere including /tmp, reads work, host unaffected. The
+committed quickstart documents but does not declare the flag (unprivileged CI runners
+lack mount namespaces; portability of the example wins). Remaining R-g fragment,
+recorded honestly: *read scoping to declared inputs only* stays open — the meta-check
+polices what reads smuggle in.
+**T7b closed as D20 determined:** enforcement is a command. The quickstart gains
+`contract-audit`, a closure-scope cell that checks its dependencies' contract
+post-invariants and re-keys whenever any of them change (contracts are inside
+`code_hash`). The contract tier is a convention with a live, CI-guarded example — not
+an engine feature, which is exactly the point.
