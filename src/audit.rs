@@ -136,7 +136,7 @@ pub fn full_audit(state_dir: &Path) -> AuditReport {
     if paths.evidence_dir.exists() {
         match fs::read_dir(&paths.evidence_dir) {
             Ok(dir) => {
-                for entry in dir.filter_map(|e| e.ok()) {
+                for entry in dir.filter_map(std::result::Result::ok) {
                     let path = entry.path();
                     let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                         continue;
@@ -164,7 +164,7 @@ pub fn full_audit(state_dir: &Path) -> AuditReport {
     }
     let stored: std::collections::BTreeSet<String> = fs::read_dir(&paths.evidence_dir)
         .map(|dir| {
-            dir.filter_map(|e| e.ok())
+            dir.filter_map(std::result::Result::ok)
                 .filter_map(|e| {
                     e.path()
                         .file_stem()

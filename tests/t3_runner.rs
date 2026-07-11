@@ -59,10 +59,15 @@ fn given_stderr_only_difference_should_change_evidence_hash() {
 
 #[test]
 fn given_a_parent_env_var_should_not_leak_into_the_cell() {
-    std::env::set_var("ARRAY_TEST_LEAK_CANARY", "leaked");
-    let outcome = run_cell(&sh("printf '%s' \"${ARRAY_TEST_LEAK_CANARY:-clean}\"")).unwrap();
-    std::env::remove_var("ARRAY_TEST_LEAK_CANARY");
-
+    // F10: prove undeclared ambient env is stripped using HOME, which the parent
+    // process already has, rather than mutating the process-global environment (racy
+    // under parallel tests, and `unsafe` in edition 2024). env_clear() must strip it
+    // because the cell never declares it.
+    assert!(
+        std::env::var_os("HOME").is_some(),
+        "test precondition: parent HOME is set",
+    );
+    let outcome = run_cell(&sh("printf '%s' \"${HOME:-clean}\"")).unwrap();
     assert_eq!(outcome.evidence.stdout, b"clean");
 }
 
@@ -111,7 +116,7 @@ fn given_a_nondeterministic_cell_the_meta_check_should_quarantine_it() {
     let verdict = run_cell_checked(&sh("head -c 16 /dev/urandom")).unwrap();
     match verdict {
         Verdict::Quarantined { first, second } => {
-            assert_ne!(first.evidence_hash, second.evidence_hash)
+            assert_ne!(first.evidence_hash, second.evidence_hash);
         }
         Verdict::Confirmed(_) => panic!("nondeterministic cell escaped quarantine"),
     }

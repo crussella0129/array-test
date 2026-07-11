@@ -58,7 +58,7 @@ fn given_the_flag_in_declared_env_it_is_part_of_the_cells_identity() {
     // test_def_hash — two otherwise-identical cells with/without it must not share a
     // key. Proven at the round level implicitly (env is hashed); here at spec level.
     use array_test::hash::{compute_cell_key, CellKeyInputs, CellScope};
-    let base = |env_flag: bool| Hash::of(&[env_flag as u8]);
+    let base = |env_flag: bool| Hash::of(&[u8::from(env_flag)]);
     // Direct demonstration that differing declared env yields differing test_def is
     // covered by AC3-era tests; this guards the convention end-to-end.
     let a = compute_cell_key(&CellKeyInputs {

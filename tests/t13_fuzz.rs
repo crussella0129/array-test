@@ -45,7 +45,9 @@ fn write_fuzzer(units_dir: &Path, markers: &Path) {
 }
 
 fn markers(dir: &Path) -> usize {
-    fs::read_dir(dir).map(|d| d.count()).unwrap_or(0)
+    fs::read_dir(dir)
+        .map(std::iter::Iterator::count)
+        .unwrap_or(0)
 }
 
 #[test]

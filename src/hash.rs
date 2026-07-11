@@ -120,7 +120,7 @@ impl fmt::Display for Hash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "blake3:")?;
         for b in &self.0 {
-            write!(f, "{:02x}", b)?;
+            write!(f, "{b:02x}")?;
         }
         Ok(())
     }
@@ -274,7 +274,15 @@ pub fn compute_code_hash(unit_dir: &Path) -> Result<Hash, CodeHashError> {
 /// The integration scope of a cell (ARCHITECTURE.md §1.4, D15). The scope decides
 /// which dep hashes enter the key — that IS its meaning in a content-addressed world —
 /// and is itself hashed into the key so the same test at two scopes cannot collide.
+///
+/// `#[repr(u8)]` with explicit discriminants makes the `scope as u8` cast in
+/// [`compute_cell_key`] a *guaranteed* part of the frozen v1 layout (D21) rather than a
+/// compiler-incidental one (F7). The discriminants were already explicit, so the bytes
+/// are unchanged — this pins intent and forbids a future reorder from silently moving a
+/// cell key. The rot-guard test (`t15b_durable`) confirms the durable ledger still
+/// verifies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(u8)]
 pub enum CellScope {
     Unit = 0,
     Direct = 1,

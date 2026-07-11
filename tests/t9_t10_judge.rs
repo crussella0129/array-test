@@ -45,7 +45,9 @@ fn write_judge(ws: &Path, markers_dir: &Path, extra: &str) {
 }
 
 fn marker_count(markers_dir: &Path) -> usize {
-    fs::read_dir(markers_dir).map(|d| d.count()).unwrap_or(0)
+    fs::read_dir(markers_dir)
+        .map(std::iter::Iterator::count)
+        .unwrap_or(0)
 }
 
 #[test]

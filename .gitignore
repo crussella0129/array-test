@@ -1,1 +1,9 @@
 /target
+**/*.rs.bk
+*.pdb
+
+# Scratch state produced by running the engine locally. The COMMITTED founding ledger
+# lives at selfhost/state and is intentionally tracked (D21 rot guard); everything else
+# a `run`/`mutate`/`fuzz` writes is ephemeral.
+/tmp-state/
+/*-state/

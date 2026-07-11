@@ -166,7 +166,7 @@ fn mutation_canonical(seq: u64, s: &UnitScore, ts: u64, prev: &Hash) -> Vec<u8> 
     out.extend_from_slice(&s.skipped.to_le_bytes());
     out.extend_from_slice(&s.score_pct.to_le_bytes());
     out.extend_from_slice(&s.min_score.to_le_bytes());
-    out.push(s.strong as u8);
+    out.push(u8::from(s.strong));
     out.extend_from_slice(&ts.to_le_bytes());
     out.extend_from_slice(prev.as_bytes());
     out

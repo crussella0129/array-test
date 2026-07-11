@@ -94,6 +94,23 @@ pub struct LedgerEntry {
     pub entry_hash: Hash,
 }
 
+impl LedgerEntry {
+    /// The provenance fields this entry commits to, as a [`ConfirmationInput`] — used to
+    /// re-derive the canonical bytes during verification (F5).
+    fn as_input(&self) -> ConfirmationInput {
+        ConfirmationInput {
+            round: self.round,
+            cell_key: self.cell_key,
+            det_status: self.det_status,
+            evidence_hash: self.evidence_hash,
+            ts: self.ts,
+            reused: self.reused,
+            isolation: self.isolation,
+            guarantee: self.guarantee,
+        }
+    }
+}
+
 fn default_isolation() -> crate::runner::IsolationLevel {
     crate::runner::IsolationLevel::EnvOnly
 }
@@ -107,29 +124,20 @@ fn isolation_byte(level: crate::runner::IsolationLevel) -> u8 {
 
 /// Canonical bytes an entry hash covers: fixed-length fields in fixed order, no
 /// serialization-format ambiguity.
-#[allow(clippy::too_many_arguments)]
-fn canonical_bytes(
-    seq: u64,
-    round: u32,
-    cell_key: &Hash,
-    det_status: DetStatus,
-    evidence_hash: &Hash,
-    ts: u64,
-    reused: bool,
-    isolation: crate::runner::IsolationLevel,
-    guarantee: Guarantee,
-    prev: &Hash,
-) -> Vec<u8> {
+/// The exact bytes an entry hash covers (F5: driven by [`ConfirmationInput`], the domain
+/// model, rather than a 10-argument list). The byte layout is frozen (D21); only the
+/// signature changed.
+fn canonical_bytes(seq: u64, input: &ConfirmationInput, prev: &Hash) -> Vec<u8> {
     let mut out = Vec::with_capacity(8 + 4 + 32 + 1 + 32 + 8 + 1 + 1 + 1 + 32);
     out.extend_from_slice(&seq.to_le_bytes());
-    out.extend_from_slice(&round.to_le_bytes());
-    out.extend_from_slice(cell_key.as_bytes());
-    out.push(det_status.byte());
-    out.extend_from_slice(evidence_hash.as_bytes());
-    out.extend_from_slice(&ts.to_le_bytes());
-    out.push(reused as u8);
-    out.push(isolation_byte(isolation));
-    out.push(guarantee.byte());
+    out.extend_from_slice(&input.round.to_le_bytes());
+    out.extend_from_slice(input.cell_key.as_bytes());
+    out.push(input.det_status.byte());
+    out.extend_from_slice(input.evidence_hash.as_bytes());
+    out.extend_from_slice(&input.ts.to_le_bytes());
+    out.push(u8::from(input.reused));
+    out.push(isolation_byte(input.isolation));
+    out.push(input.guarantee.byte());
     out.extend_from_slice(prev.as_bytes());
     out
 }
@@ -220,43 +228,19 @@ impl Ledger {
     /// Append one confirmation with full provenance: cache inheritance (D13), the
     /// isolation level it was earned under (D16), its declared guarantee (D17).
     pub fn record(&mut self, input: ConfirmationInput) -> Result<LedgerEntry, LedgerError> {
-        let ConfirmationInput {
-            round,
-            cell_key,
-            det_status,
-            evidence_hash,
-            ts,
-            reused,
-            isolation,
-            guarantee,
-        } = input;
         let seq = self.next_seq;
         let prev = self.last_hash;
-        let entry_hash = Hash::leaf(
-            domain::LEDGER_ENTRY,
-            &canonical_bytes(
-                seq,
-                round,
-                &cell_key,
-                det_status,
-                &evidence_hash,
-                ts,
-                reused,
-                isolation,
-                guarantee,
-                &prev,
-            ),
-        );
+        let entry_hash = Hash::leaf(domain::LEDGER_ENTRY, &canonical_bytes(seq, &input, &prev));
         let entry = LedgerEntry {
             seq,
-            round,
-            cell_key,
-            det_status,
-            evidence_hash,
-            ts,
-            reused,
-            isolation,
-            guarantee,
+            round: input.round,
+            cell_key: input.cell_key,
+            det_status: input.det_status,
+            evidence_hash: input.evidence_hash,
+            ts: input.ts,
+            reused: input.reused,
+            isolation: input.isolation,
+            guarantee: input.guarantee,
             prev,
             entry_hash,
         };
@@ -317,18 +301,7 @@ pub fn load_and_verify(path: &Path) -> Result<Vec<LedgerEntry>, LedgerError> {
         }
         let recomputed = Hash::leaf(
             domain::LEDGER_ENTRY,
-            &canonical_bytes(
-                entry.seq,
-                entry.round,
-                &entry.cell_key,
-                entry.det_status,
-                &entry.evidence_hash,
-                entry.ts,
-                entry.reused,
-                entry.isolation,
-                entry.guarantee,
-                &entry.prev,
-            ),
+            &canonical_bytes(entry.seq, &entry.as_input(), &entry.prev),
         );
         if recomputed != entry.entry_hash {
             return Err(LedgerError::ChainBroken {
