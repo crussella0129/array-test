@@ -513,3 +513,32 @@ maintainability-only half of F1 — as disproportionate machinery for this patte
 **Coverage note:** sidecar layouts aren't covered by the durable-ledger rot guard, so a
 2-entry multi-append chain-verify assertion was added to the two-unit mutation test as
 their witness. 127 pass / 3 ignored; byte-preserving.
+
+## D29 — Security hardening: validate at the source, contain defensively, document the trust boundary (s20)
+**Context:** The refactoring plan's security cluster (F16–F18, F21). Re-audit found the
+plan's premises were partly stale:
+- **F16** claimed the judge's `critique_ref` was attacker-supplied and joined to the
+  state dir without validation. In fact `critique_ref` is *engine-generated*
+  (`ledger/critiques/<64-hex cell_key>/N.md`) and cannot traverse. The join was not a
+  live vulnerability.
+- **F18** (unit `id` reaches path construction) *was* real: `id` is author-controlled and
+  flows into mutation work-dir paths (`mutation.rs` `id.replace('/', "_")`), so a crafted
+  `id` (`../`, separators, leading dot, control chars) could traverse or confuse the FS.
+**Decision:** Apply defense at the *source* and containment at the *use site*, and record
+the premise corrections so the divergence from the plan is auditable.
+- **F18 (real fix):** `validate_unit_id` at manifest load time — reject empty, path
+  separators, `..`, leading dot, control/whitespace chars. Dotted namespacing
+  (`u.parser.tokenize`) stays legal. Rejecting at parse time keeps the error at its cause,
+  not at a downstream DAG/FS symptom (the same doctrine as the existing self-dep check).
+- **F16 (defensive, premise corrected):** `safe_state_path(state_dir, ref)` rejects
+  absolute paths and any non-`Normal` component, used at the repair-loop join. It never
+  rejects a value the engine produces today — it is a guard for the day a judgment is
+  loaded from disk (hence attacker-influenceable) rather than computed in-process. The
+  stale "live vuln" framing is corrected here.
+- **F17 / F21 (document the boundary):** Safety/trust doc-comments on `run_repair` (spawns
+  an operator-authored command at test trust level; nothing attacker-controlled reaches
+  argv/env; not sandboxed by design — the next det round re-runs under the sandbox) and on
+  the `unsafe fn make_root_readonly` (caller must already be in a fresh private mount
+  namespace; the precondition is a contract the sandbox upholds, uncheckable here).
+**Coverage:** new tests — id-traversal rejection (manifest) and `safe_state_path`
+accept/reject (judge unit test). 129 pass / 3 ignored; zero frozen surfaces touched.

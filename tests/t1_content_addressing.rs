@@ -268,6 +268,25 @@ fn given_a_manifest_with_an_empty_id_should_be_rejected() {
 }
 
 #[test]
+fn given_a_manifest_whose_id_could_traverse_the_filesystem_should_be_rejected() {
+    // F18: the id reaches path construction (mutation work dirs), so a separator, `..`,
+    // leading dot, or absolute-looking id must be refused at load time.
+    let dir = tempdir().unwrap();
+    for bad in ["a/b", "..", "../escape", ".hidden", "a\\b", "a\tb"] {
+        let path = dir.path().join("manifest.toml");
+        fs::write(&path, format!("id = \"{bad}\"\nversion = \"0.1.0\"\n")).unwrap();
+        assert!(
+            load_manifest(&path).is_err(),
+            "id {bad:?} should have been rejected"
+        );
+    }
+    // A dotted (namespaced) id is still fine.
+    let path = dir.path().join("manifest.toml");
+    fs::write(&path, "id = \"u.parser.tokenize\"\nversion = \"0.1.0\"\n").unwrap();
+    assert!(load_manifest(&path).is_ok());
+}
+
+#[test]
 fn given_a_manifest_missing_a_required_field_should_be_rejected() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("manifest.toml");
