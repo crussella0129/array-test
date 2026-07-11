@@ -169,4 +169,45 @@ test result: ok. 2 passed; 0 failed; 1 ignored; finished in 0.02s
         assert!(tap.contains("1..2"));
         assert!(tap.contains("not ok 2 - inner process exited nonzero"));
     }
+
+    // F12: edge cases for the parser — the failure modes that "test result:" noise and
+    // odd verdicts could hit.
+    #[test]
+    fn given_lines_without_the_separator_should_be_ignored() {
+        // No " ... " → not a test point. Guards against `test result: ok. ...` and
+        // partial/torn lines being misread.
+        assert!(parse_libtest("test result: ok. 2 passed\n").is_empty());
+        assert!(parse_libtest("testing something unrelated\n").is_empty());
+        assert!(parse_libtest("test truncated_no_verdict ...\n").is_empty());
+    }
+
+    #[test]
+    fn given_an_unknown_verdict_should_be_dropped_not_misclassified() {
+        // A verdict we don't recognize must not silently become ok/failed.
+        assert!(parse_libtest("test weird ... bench: 3 ns/iter\n").is_empty());
+    }
+
+    #[test]
+    fn given_ignored_with_a_trailing_message_should_be_a_skip() {
+        let pts = parse_libtest("test t ... ignored, needs network\n");
+        assert_eq!(pts.len(), 1);
+        assert_eq!(pts[0].status, PointStatus::Ignored);
+    }
+
+    #[test]
+    fn given_a_test_name_containing_the_separator_should_keep_the_full_name() {
+        // rsplit_once takes the LAST " ... " so a name with the token survives.
+        let pts = parse_libtest("test mod::does ... something ... ok\n");
+        assert_eq!(pts.len(), 1);
+        assert_eq!(pts[0].name, "mod::does ... something");
+        assert_eq!(pts[0].status, PointStatus::Ok);
+    }
+
+    #[test]
+    fn given_empty_output_should_yield_an_empty_but_valid_plan() {
+        assert_eq!(
+            render_tap(parse_libtest(""), true),
+            "TAP version 13\n1..0\n"
+        );
+    }
 }

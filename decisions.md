@@ -474,3 +474,18 @@ run will surface additional items"). s15 = foundation & hygiene quick wins:
   `semicolon_if_nothing_returned`, `unnested_or_patterns`, `cast_lossless`. Full
   pedantic left as a deliberate non-goal.
 **Zero frozen surfaces changed** (F5/F7 are byte-preserving; rot guard `t15b` verifies).
+
+## D27 — Capability-gated tests must be `#[ignore]`, not silent skips (s16, F11)
+**Context:** Three headline features — network namespaces, read-only mounts, real
+Hypothesis property testing — gated on host capability and `return`ed silently when
+absent. On ubuntu CI (no CAP_SYS_ADMIN, no hypothesis) all three reported PASS *without
+executing*; a regression in the runner's isolation setup would ship green.
+**Decision:** The honesty doctrine (D14 "silence never reads as success", D19 "success
+never reads as failure") applied to test reporting: a not-run test must read as
+*ignored*, never *passed*. The three tests are now `#[ignore = "…"]`; a privileged CI
+job (`--privileged --cap-add=SYS_ADMIN`, pip-installs hypothesis) runs them for real via
+`cargo test -- --ignored`. Verified live here with `--include-ignored`.
+**Scoping:** F9 (`tests/common/` consolidation), F13 (Rust proptest), F14 (`parse_args`
+extraction) deferred as coverage-*depth*, not correctness-*masking* — F11 was the only
+item that let a real regression ship green. Added F12 parser edge-case tests where
+cheapest (`tap::parse_libtest`, `Hash::from_str`).

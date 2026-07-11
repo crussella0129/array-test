@@ -48,7 +48,11 @@ fn given_a_cell_exceeding_its_memory_cap_should_fail_not_pass() {
     );
 }
 
+// F11: #[ignore] so a host without CAP_SYS_ADMIN reports this as *ignored*, never
+// falsely *passed*. The privileged CI job (.github/workflows/ci.yml) runs it via
+// `cargo test -- --ignored`; locally, `cargo test -- --include-ignored`.
 #[test]
+#[ignore = "requires a network namespace (CAP_SYS_ADMIN / userns); run via --ignored"]
 fn given_net_isolation_a_cell_should_see_only_loopback() {
     if isolation_level() != IsolationLevel::NetIsolated {
         eprintln!("host cannot create network namespaces; AC53 skipped (EnvOnly level)");

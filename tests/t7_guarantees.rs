@@ -88,7 +88,10 @@ fn given_an_executed_cell_its_evidence_should_be_stored_and_rehash_to_the_ledger
         .any(|w| w == b"stored-evidence"));
 }
 
+// F11: #[ignore] so a host without python3+hypothesis reports *ignored*, not falsely
+// *passed*. The privileged CI job pip-installs hypothesis and runs it via --ignored.
 #[test]
+#[ignore = "requires python3 + hypothesis; run via --ignored"]
 fn given_a_real_hypothesis_property_cell_should_pass_deterministically() {
     let have_hypothesis = Command::new("python3")
         .args(["-c", "import hypothesis"])
