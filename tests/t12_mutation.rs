@@ -81,6 +81,17 @@ fn given_a_real_test_all_mutants_die_and_a_vacuous_test_lets_them_all_live() {
     assert!(!weak.score.strong);
 
     assert!(!report.all_strong);
+
+    // F1/s17: two units → two appends via the open-once MutationWriter. Read the chain
+    // back to prove multi-entry linkage is intact (sidecar layouts aren't covered by
+    // the durable-ledger rot guard, so this is their multi-append witness).
+    let paths = StatePaths::new(state.path());
+    let entries = read_mutations(&paths).unwrap();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].seq, 0);
+    assert_eq!(entries[1].seq, 1);
+    assert_eq!(entries[1].prev, entries[0].entry_hash);
+    assert!(full_audit(state.path()).clean());
 }
 
 #[test]

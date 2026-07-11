@@ -422,8 +422,8 @@ fn judge_round(
             continue;
         }
         let cache_path = judge_cache_path(paths, &cell.cell_key, &jhash);
-        if let Ok(text) = fs::read_to_string(&cache_path) {
-            if let Ok(cached) = serde_json::from_str::<CellJudgment>(&text) {
+        {
+            if let Some(cached) = crate::cache::read_cache::<CellJudgment>(&cache_path) {
                 judged.push(JudgedCell {
                     unit_id: cell.unit_id.clone(),
                     scope: cell.scope,

@@ -489,3 +489,27 @@ job (`--privileged --cap-add=SYS_ADMIN`, pip-installs hypothesis) runs them for 
 extraction) deferred as coverage-*depth*, not correctness-*masking* — F11 was the only
 item that let a real regression ship green. Added F12 parser edge-case tests where
 cheapest (`tap::parse_libtest`, `Hash::from_str`).
+
+## D28 — Fix the O(N²) sidecar appends (F1 substance); share the primitive, not the ledger (s17)
+**Context:** F1 flagged the hash-chained-ledger pattern duplicated 4× with an O(N²)
+re-read-per-append bug. Re-audit at s17: `judge.rs` was already fixed (s9 `JudgmentWriter`
+is open-once), so the live bug was only `mutation.rs`/`fuzz.rs` — each called `read_*`
+(read + chain-verify the whole file) on every append.
+**Decision:** Fix the bug the proven way — open-once `MutationWriter`/`FuzzWriter` that
+read the tail at open and keep `(last_hash, next_seq)` in memory (O(1) per append). Share
+the *bookkeeping primitive* (`chained::ChainState` + `append_ndjson_line`), **not** a
+generic-over-entry-type ledger: the four entry layouts differ and one (confirmations) is
+freeze-locked, so a shared trait would carry more machinery than a 4-instance pattern
+earns. Byte layouts are unchanged — each writer keeps its exact `canonical` bytes.
+- **F6:** shared `cache::read_cache<T>` for the four cache sites; fixes fuzz's
+  `read_to_string(...).unwrap_or_default()` (which hid permission/I-O errors as `""`).
+  A genuine miss (`NotFound`) is silent; corruption is surfaced on stderr, never
+  conflated (the D14/D19 honesty doctrine, applied to the cache).
+- **F4:** typed `Spawn`/`Malformed`/`ChainBroken` variants in `MutationError`/`FuzzError`
+  (was: spawn reported as `Io` on the program path; malformed/broken as `ConfigInvalid`),
+  matching `LedgerError`'s diagnostics with line/seq detail.
+**Deferred (documented):** the fully-generic `HashChainedLedger<T>` extraction — the
+maintainability-only half of F1 — as disproportionate machinery for this pattern.
+**Coverage note:** sidecar layouts aren't covered by the durable-ledger rot guard, so a
+2-entry multi-append chain-verify assertion was added to the two-unit mutation test as
+their witness. 127 pass / 3 ignored; byte-preserving.

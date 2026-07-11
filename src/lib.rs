@@ -2,6 +2,8 @@
 //! software construction. See `docs/ARCHITECTURE.md` for the full design.
 
 pub mod audit;
+pub(crate) mod cache;
+pub(crate) mod chained;
 pub mod contract;
 pub mod dag;
 pub mod fuzz;
