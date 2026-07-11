@@ -1,0 +1,11 @@
+id = "selfhost.tap"
+version = "1.0.0"
+
+[tests.unit]
+command = ["/bin/sh", "src/check.sh"]
+timeout_secs = 60
+
+[tests.unit.env]
+# Relative PATH entries resolve against the cell's cwd (this unit dir), so the freshly
+# built binary is reachable from any clone with no absolute paths (D21).
+PATH = "../../../target/debug:/usr/local/bin:/usr/bin:/bin"

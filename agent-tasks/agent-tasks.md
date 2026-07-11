@@ -3,28 +3,32 @@
 Persistent across sprints (sprint-loops convention). Ordered by build dependency
 (see ARCHITECTURE.md §9). Move finished items to `completed-tasks.md`.
 
-## Foundation (Sprint s0 candidates)
-- [ ] **T1 — Content addressing & schemas.** Define `manifest.toml` + `contract.toml`
-  schemas; implement `code_hash = H(src ‖ contract)` and `cell_key` (§2). Deterministic,
-  stable, documented.
-- [ ] **T2 — Integration DAG resolver.** Parse `deps`, build `dag.json`, detect cycles,
-  expose forward (closure / "down") and reverse (impact / "backwards") traversals.
+**Toolchain (locked, D8):** Rust core engine (T1–T5, T9–T11); Python + Hypothesis for the
+property tier (T7); TAP as the language-agnostic evidence contract (T6) — riteway is an
+optional adapter for JS units, not a dependency of the core.
 
-## Engine (s1+)
-- [ ] **T3 — Hermetic cell runner.** Execute one `(target, scope)` cell under frozen
-  clock / pinned seed / no-I/O; emit `evidence_hash`. Include determinism meta-check
-  (run twice, hashes must match) → quarantine on mismatch.
-- [ ] **T4 — Confirmation ledger.** Append-only `confirmations.ndjson`, hash-chained;
-  Merkle root over `{cell_key → status}`; `roots/R<k>.json`.
-- [ ] **T5 — Frontier selection + cache.** Diff `code_hash`es, compute impact closure,
-  derive changed `cell_key`s, reuse cached ✓ for the rest. Round cost ∝ frontier.
+## Engine (s7+)
+- [ ] **T3c — Filesystem read scoping.** [Rust] The last R-g fragment: bind-mount/
+  chroot-style scoping so a cell can only read its declared inputs. (Memory caps and
+  network isolation landed s6, D16.)
 
-## Guarantees (s2+)
-- [ ] **T6 — Property + contract tiers.** Generator-based property runner with shrinking;
-  enforce contract pre/post/invariants per cell; record guarantee level.
-- [ ] **T7 — Optional formal tier.** Encode designated critical-unit invariants for a
-  model checker / SMT; attach `proof_hash`.
 
-## Surface (s2+)
-- [ ] **T8 — CLI + sprint-loop wiring.** `array-test run` as a pure function of the tree;
-  wire `R_k` to the sprint Test phase and the green-root gate to Loop.
+## Guarantees (s8+)
+- [ ] **T7b — Contract tier.** [Rust] Enforce `contract.toml` pre/post/invariants per
+  cell (the property tier landed s7; contracts are still declarations only).
+- [ ] **T8b — Live Kani tier.** [Rust + Kani] Environment-gated: actually discharge
+  designated critical-unit invariants with the model checker; attach `proof_hash`.
+  (`guarantee = "proved"` schema landed s7.)
+- [ ] **T12 — Frontier-scoped mutation testing.** [Rust + cargo-mutants] Mutation score
+  as guarantee-level metadata per confirmation; only dirty units re-mutate — scores are
+  memoized by `code_hash`, the same economics as the regression frontier. (D10;
+  s2 research report §2.5.)
+- [ ] **T13 — Fuzz tier (opt-in).** [Rust + cargo-fuzz] Coverage-guided fuzzing per
+  unit; corpus is a content-addressed fixture set, so corpus growth re-keys cells
+  naturally. (D10; s2 research report §2.6.)
+
+## Surface (s5+)
+- [ ] **T14 — sprint-loops Test-phase adapter.** Shim (sprint-loops side, or an adapter
+  doc here) mapping array-test's stable outputs (`roots/R<k>.json`, ledger, green gate)
+  onto sprint-loops artifacts (`test-report.md`/`failure-report.md`, phase exit).
+  One-directional per D11 — array-test never learns sprint-loops exists.

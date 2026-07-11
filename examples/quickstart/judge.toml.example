@@ -1,0 +1,16 @@
+# Copy to units/judge.toml to enable Phase J (the two-phase confirmation gate).
+# The judge is any command that reads the unit (env: ARRAY_TEST_UNIT_DIR,
+# ARRAY_TEST_UNIT_ID, ARRAY_TEST_SCOPE, ARRAY_TEST_EVIDENCE, ARRAY_TEST_CONTRACT)
+# and prints a critique whose LAST line is `rating: <0-100>`.
+
+command    = ["/bin/sh", "-c", "echo 'Reviewed: contract present and tests meaningful.'; echo 'rating: 90'"]
+runs       = 3      # independent judge passes per cell
+threshold  = 100    # percent of runs that must clear min_rating
+min_rating = 80
+
+# Optional: enable the repair micro-loop. The repair command receives
+# ARRAY_TEST_UNIT_DIR and ARRAY_TEST_CRITIQUE, edits the unit in place, and the next
+# round re-runs exactly what changed.
+#[repair]
+#command = ["your-agent", "fix", "--from-critique"]
+#budget  = 2

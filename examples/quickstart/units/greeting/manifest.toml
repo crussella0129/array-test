@@ -1,0 +1,8 @@
+id = "greeting"
+sprint = 1
+version = "0.1.0"
+
+# The unit's own suite: no dependencies enter this cell's key, so it only re-runs
+# when greeting itself (or this test definition) changes.
+[tests.unit]
+command = ["/bin/sh", "-c", ". ./src/greeting.sh && test \"$(greet world)\" = 'hello, world' && printf 'ok 1 - greets by name\n'"]

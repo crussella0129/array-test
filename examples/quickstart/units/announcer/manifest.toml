@@ -1,0 +1,9 @@
+id = "announcer"
+sprint = 1
+version = "0.1.0"
+deps = ["greeting"]
+
+# Closure scope: the greeting unit's code_hash is inside this cell's key, so editing
+# greeting/src re-runs this cell too — the schema's "backwards" arrow, emergent.
+[tests.closure]
+command = ["/bin/sh", "-c", ". ../greeting/src/greeting.sh && . ./src/announcer.sh && test \"$(announce world)\" = 'HELLO, WORLD!' && printf 'ok 1 - announces loudly\n'"]

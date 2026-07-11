@@ -1,0 +1,6 @@
+[io]
+input  = "libtest-style stdout"
+output = "sorted, timing-free TAP 13"
+
+[invariants]
+post = ["no timing or count noise survives", "test points sorted by name"]
