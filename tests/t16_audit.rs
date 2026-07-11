@@ -142,8 +142,8 @@ fn given_the_committed_quickstart_example_a_round_should_run_green() {
 
     let r1 = run_round(&units, state.path(), None, 0, None).unwrap();
     assert!(r1.record.all_pass, "quickstart must stay green: {r1:?}");
-    assert_eq!(r1.record.cells, 2);
-    assert_eq!(r1.executed(), 2);
+    assert_eq!(r1.record.cells, 3);
+    assert_eq!(r1.executed(), 3);
 
     // And its README's central claim holds: an unchanged second round reuses all.
     let r2 = run_round(&units, state.path(), None, 0, None).unwrap();

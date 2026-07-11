@@ -75,6 +75,96 @@ fn netns_flags() -> Option<libc::c_int> {
     })
 }
 
+/// Recognized declared-env extension flag (T3c/D25): a cell declaring
+/// `ARRAY_TEST_FS_READONLY = "1"` runs with the entire filesystem recursively
+/// read-only (fresh mount namespace + `mount_setattr(AT_RECURSIVE, RDONLY)`).
+/// Declared env is already inside `test_def_hash`, so the flag re-keys the cell —
+/// the per-test extension channel that needs no frozen-layout change.
+pub const FS_READONLY_ENV: &str = "ARRAY_TEST_FS_READONLY";
+
+#[cfg(unix)]
+mod fs_ro {
+    // mount_setattr (Linux 5.12+): the one honest way to make every mount in the
+    // namespace read-only recursively. Constants per uapi/linux/mount.h.
+    #[repr(C)]
+    pub struct MountAttr {
+        pub attr_set: u64,
+        pub attr_clr: u64,
+        pub propagation: u64,
+        pub userns_fd: u64,
+    }
+    pub const MOUNT_ATTR_RDONLY: u64 = 0x1;
+    pub const AT_RECURSIVE: libc::c_int = 0x8000;
+
+    /// Make the current mount namespace fully read-only. Caller must already be in a
+    /// fresh, private namespace. Fail-closed.
+    pub unsafe fn make_root_readonly() -> Result<(), std::io::Error> {
+        // Disconnect propagation so the read-only flip cannot leak to the host.
+        if libc::mount(
+            std::ptr::null(),
+            c"/".as_ptr(),
+            std::ptr::null(),
+            libc::MS_REC | libc::MS_PRIVATE,
+            std::ptr::null(),
+        ) != 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
+        let attr = MountAttr {
+            attr_set: MOUNT_ATTR_RDONLY,
+            attr_clr: 0,
+            propagation: 0,
+            userns_fd: 0,
+        };
+        let rc = libc::syscall(
+            libc::SYS_mount_setattr,
+            libc::AT_FDCWD,
+            c"/".as_ptr(),
+            AT_RECURSIVE,
+            &attr as *const MountAttr,
+            std::mem::size_of::<MountAttr>(),
+        );
+        if rc != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(())
+    }
+}
+
+/// Probe (once) whether read-only cells are supported here: needs a mount namespace
+/// (root or user-ns) plus mount_setattr.
+#[cfg(unix)]
+pub fn fs_readonly_supported() -> bool {
+    static PROBE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PROBE.get_or_init(|| {
+        for extra in [0, libc::CLONE_NEWUSER] {
+            let mut cmd = Command::new("/bin/sh");
+            cmd.args(["-c", "! touch /tmp/.array-test-ro-probe 2>/dev/null"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            unsafe {
+                use std::os::unix::process::CommandExt;
+                cmd.pre_exec(move || {
+                    if libc::unshare(libc::CLONE_NEWNS | extra) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    fs_ro::make_root_readonly()
+                });
+            }
+            if matches!(cmd.status(), Ok(status) if status.success()) {
+                return true;
+            }
+        }
+        false
+    })
+}
+
+#[cfg(not(unix))]
+pub fn fs_readonly_supported() -> bool {
+    false
+}
+
 /// The isolation level cells in this process actually get (recorded per confirmation).
 pub fn isolation_level() -> IsolationLevel {
     #[cfg(unix)]
@@ -194,6 +284,8 @@ pub fn run_cell(spec: &CellSpec) -> Result<RunOutcome, RunError> {
 
         let mem_limit = spec.mem_limit_mb;
         let net_flags = netns_flags();
+        // T3c/D25: declared-env opt-in for a recursively read-only filesystem.
+        let fs_readonly = spec.env.get(FS_READONLY_ENV).map(String::as_str) == Some("1");
         unsafe {
             cmd.pre_exec(move || {
                 if let Some(mb) = mem_limit {
@@ -207,11 +299,17 @@ pub fn run_cell(spec: &CellSpec) -> Result<RunOutcome, RunError> {
                     }
                 }
                 // Fail closed (D16): if the host can isolate, a cell that cannot be
-                // isolated does not run.
-                if let Some(flags) = net_flags {
-                    if libc::unshare(flags) != 0 {
-                        return Err(std::io::Error::last_os_error());
-                    }
+                // isolated does not run. Same doctrine for the read-only flag: a cell
+                // that declared RO and can't get it does not run.
+                let mut flags = net_flags.unwrap_or(0);
+                if fs_readonly {
+                    flags |= libc::CLONE_NEWNS;
+                }
+                if flags != 0 && libc::unshare(flags) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if fs_readonly {
+                    fs_ro::make_root_readonly()?;
                 }
                 Ok(())
             });

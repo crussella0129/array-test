@@ -1,0 +1,3 @@
+[io]
+input  = "dependency contracts"
+output = "TAP confirmation that their post-invariants hold"
