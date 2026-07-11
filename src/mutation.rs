@@ -412,7 +412,7 @@ pub fn run_mutation(
             let _ = fs::remove_dir_all(&work_units);
         }
 
-        let score_pct = if ran > 0 { killed * 100 / ran } else { 0 };
+        let score_pct = (killed * 100).checked_div(ran).unwrap_or(0);
         let score = UnitScore {
             unit_id: id.clone(),
             code_hash: info.code_hash,
