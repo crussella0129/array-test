@@ -108,6 +108,11 @@ independently re-verifiable hash-chained `confirmations.ndjson`, and hash-commit
 evidence. Anyone holding the ledger file can re-verify the chain and root with zero trust
 in the runner.
 
+For the sprint-loops protocol specifically, [`adapters/sprint-loops/`](adapters/sprint-loops/)
+is a thin, optional Test-phase shim (T14): it runs a round over a sprint's units and gates
+the sprint on a green, re-verified root, keeping the core agnostic (the adapter depends on
+array-test, never the reverse).
+
 ## Using this repo as a template
 The repo is two templates in one (D22): **the verification kernel** (frozen engine +
 founding ledger — write units, get provable regression from commit one; all instances

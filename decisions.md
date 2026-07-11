@@ -676,3 +676,28 @@ tier now *demonstrably* verifies over the whole input space in CI, and where the
 absent the tests read as *ignored*, never falsely passed. 131 pass / 5 ignored normally;
 136 with CBMC. Kani (Rust path) remains a future addition if its bundle host is ever
 authorized; the tier is prover-agnostic by design.
+
+## D35 — T14: the sprint-loops Test-phase adapter, kept off the agnostic core (s24)
+**Context:** array-test was built to power the Test phase of sprint-loops, but D11 makes the
+core consumer-agnostic — it must never reference sprint-loops. T14 is the shim that wires
+the two together without violating that.
+**Decision:** A thin, optional adapter at `adapters/sprint-loops/` — a POSIX-sh Test-phase
+entrypoint (`array-test-phase.sh`) plus its README — that runs one array-test round over a
+sprint's units and gates the sprint on a green, re-verified root. It touches no engine
+code; the core stays agnostic (the adapter depends on array-test, never the reverse). The
+mapping it realizes: a sprint's deliverable → units; the test-plan's ACs → cells; the Test
+verdict → a green root; the persistent `.array-test/state/` → the project's durable,
+independently re-verifiable test memory. Because state persists across sprints, each Test
+phase is incremental (unchanged units reused, byte-identical root) — the founding schema's
+down/out/backwards array made economical by content addressing.
+**Verified here:** `tests/t14_sprint_loops_adapter.rs` drives the script as a black box —
+green project → exit 0 + a `test-record.md` carrying the root; a broken unit → exit 1, RED
+record; a missing binary → exit 2. Ran the phase live against the quickstart units (green,
+then frontier-reuse on re-run, then red after a break).
+**The `array-test-fork` limitation (reported, not worked around):** the user asked for this
+on the sprint-loops side, in a fork named `array-test-fork`. This session's GitHub token is
+scoped to `crussella0129/array-test`; `create_repository`/`fork_repository` for anything
+else return `403 Resource not accessible by integration` (the same scope wall that blocked
+the Kani bundle in D34). So the adapter is delivered in-scope, self-contained, and designed
+to be copied straight into that fork — the fork's creation is the user's to do (or a
+session with broader GitHub scope). Not circumvented.
