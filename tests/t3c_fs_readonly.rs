@@ -26,7 +26,9 @@ fn spec(script: &str, ro: bool) -> CellSpec {
     }
 }
 
+// F11: #[ignore] so an incapable host reports *ignored*, not falsely *passed*.
 #[test]
+#[ignore = "requires a mount namespace (CAP_SYS_ADMIN / userns); run via --ignored"]
 fn given_the_readonly_flag_a_cell_cannot_write_anywhere_but_can_still_read() {
     if !fs_readonly_supported() {
         eprintln!("host cannot create mount namespaces; AC90 skipped");

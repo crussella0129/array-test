@@ -397,4 +397,35 @@ mod tests {
         let b = Hash::node(domain::CELL_KEY, &[]);
         assert_ne!(a, b);
     }
+
+    // F12: Hash <-> string round-trip and the parse failure modes.
+    #[test]
+    fn given_a_hash_its_string_form_should_round_trip() {
+        let h = Hash::of(b"round trip");
+        let parsed: Hash = h.to_string().parse().unwrap();
+        assert_eq!(parsed, h);
+        // hex() is the prefix-free filename form; the Display form carries `blake3:`.
+        assert_eq!(h.to_string(), format!("blake3:{}", h.hex()));
+    }
+
+    #[test]
+    fn given_a_string_missing_the_prefix_should_fail_to_parse() {
+        let hex = Hash::of(b"x").hex();
+        assert!(
+            hex.parse::<Hash>().is_err(),
+            "bare hex has no blake3: prefix"
+        );
+    }
+
+    #[test]
+    fn given_a_string_of_the_wrong_length_should_fail_to_parse() {
+        assert!("blake3:00".parse::<Hash>().is_err());
+        assert!("blake3:".parse::<Hash>().is_err());
+    }
+
+    #[test]
+    fn given_non_hex_characters_should_fail_to_parse() {
+        let bad = format!("blake3:{}", "z".repeat(HASH_LEN * 2));
+        assert!(bad.parse::<Hash>().is_err());
+    }
 }
