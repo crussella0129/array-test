@@ -372,3 +372,31 @@ two founding rounds, and commits its own D21 moment; the rot guard then protects
 history. CI (`.github/workflows/ci.yml`) keeps the template's promise live: every push
 re-audits the committed ledger (fmt + build + test + clippy -D warnings). Flipping the
 GitHub "Template repository" setting is a human step, noted in the doc.
+
+## D23 — The mutation tier: who tests the tests, frontier-scoped (s12, T12)
+**Context:** A green array certifies "all tests pass" — only as strong as the tests
+(s2 §2.5). First post-freeze extension; must prove D20's doctrine.
+**Decision:**
+- **The mutator is a command** (`mutation.toml`: command/mutants/min_score — the
+  judge/repair pattern a third time). It receives a scratch COPY of a unit and an
+  index; language awareness (cargo-mutants, sed, an LLM) lives in the mutator, never
+  the engine. `mutator_hash` pins its identity (R-f logic). Exit 64 = "no mutant at
+  this index"; a mutant that doesn't change `code_hash` isn't a mutant (skipped).
+- **Killed ⇔ a full round over the mutant workspace goes red** — deliberately broader
+  than "the unit's own cells failed": a dependent's closure-scope cell catching the
+  mutant is the integration lattice doing its job, and it counts. Baseline must be
+  green first. Scratch rounds share one cache (content-addressed ⇒ sharing is safe by
+  construction), so the frontier economics apply inside the mutation run too.
+- **Memoization key = (code_hash, mutator_hash, baseline_root).** The baseline root IS
+  a commitment to the whole detection surface, so scores re-compute exactly when any
+  test, dep, seed, or toolchain changes — and never otherwise. Only the dirty frontier
+  re-mutates: T12's founding promise (s2 §2.5), kept.
+- **Sidecar everything (D20 proven):** new contexts (`mutator`, `mutation-entry`,
+  `mutation-genesis`), hash-chained `mutations.ndjson`, audit coverage, cache under
+  `mutation-cache/` — zero frozen surfaces touched.
+- **CLI:** a separate `mutate` verb (deliberately expensive; never ambushes `run`);
+  exit 0 iff every mutated unit is mutation-strong.
+**Proven by test:** a content-checking unit kills 2/2 mutants (strong); a vacuous
+`true` test lets 2/2 survive (weak — the exact pathology the tier exists to expose);
+an unchanged workspace re-mutates nothing; tampering with a recorded score breaks the
+chain.

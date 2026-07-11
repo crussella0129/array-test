@@ -343,6 +343,10 @@ pub struct StatePaths {
     pub critiques_dir: PathBuf,
     pub judge_cache_dir: PathBuf,
     pub failures_dir: PathBuf,
+    /// T12 sidecar surfaces (added post-freeze, D20-legal).
+    pub mutations_file: PathBuf,
+    pub mutation_cache_dir: PathBuf,
+    pub mutation_work_dir: PathBuf,
 }
 
 impl StatePaths {
@@ -356,6 +360,9 @@ impl StatePaths {
             critiques_dir: state_dir.join("ledger").join("critiques"),
             judge_cache_dir: state_dir.join("judge-cache"),
             failures_dir: state_dir.join("ledger").join("failures"),
+            mutations_file: state_dir.join("ledger").join("mutations.ndjson"),
+            mutation_cache_dir: state_dir.join("mutation-cache"),
+            mutation_work_dir: state_dir.join("mutation-work"),
         }
     }
 }
