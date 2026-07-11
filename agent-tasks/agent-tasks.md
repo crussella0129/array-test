@@ -19,13 +19,9 @@ optional adapter for JS units, not a dependency of the core.
 - [ ] **T8b — Live Kani tier.** [Rust + Kani] Environment-gated: actually discharge
   designated critical-unit invariants with the model checker; attach `proof_hash`.
   (`guarantee = "proved"` schema landed s7.)
-- [ ] **T12 — Frontier-scoped mutation testing.** [Rust + cargo-mutants] Mutation score
-  as guarantee-level metadata per confirmation; only dirty units re-mutate — scores are
-  memoized by `code_hash`, the same economics as the regression frontier. (D10;
-  s2 research report §2.5.)
 - [ ] **T13 — Fuzz tier (opt-in).** [Rust + cargo-fuzz] Coverage-guided fuzzing per
   unit; corpus is a content-addressed fixture set, so corpus growth re-keys cells
-  naturally. (D10; s2 research report §2.6.)
+  naturally. (D10; s2 research report §2.6.) The T12 sidecar pattern applies directly.
 
 ## Surface (s5+)
 - [ ] **T14 — sprint-loops Test-phase adapter.** Shim (sprint-loops side, or an adapter

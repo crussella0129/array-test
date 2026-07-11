@@ -56,6 +56,10 @@ pub mod domain {
     pub const JUDGE: &str = "array-test/v1/judge";
     pub const JUDGMENT_ENTRY: &str = "array-test/v1/judgment-entry";
     pub const JUDGMENT_GENESIS: &str = "array-test/v1/judgment-genesis";
+    // Added post-freeze (s12, T12) — additive contexts are legal under D20/D21.
+    pub const MUTATOR: &str = "array-test/v1/mutator";
+    pub const MUTATION_ENTRY: &str = "array-test/v1/mutation-entry";
+    pub const MUTATION_GENESIS: &str = "array-test/v1/mutation-genesis";
 }
 
 /// A blake3 digest.

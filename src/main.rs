@@ -13,11 +13,15 @@ USAGE:
   array-test run --units <dir> --state <dir> [--round N] [--seed N] [--toolchain-hash blake3:HEX]
   array-test verify --state <dir>
   array-test tap -- <command> [args...]
+  array-test mutate --units <dir> --state <dir> [--seed N]
 
 run     Execute one regression round. Exit 0 iff the round is green (all cells Pass).
 verify  Re-verify the ledger chain and the latest round's root. Exit 0 iff intact.
 tap     Run a libtest-style command and emit deterministic, timing-free TAP on stdout
         (the evidence adapter for wrapping e.g. `cargo test` inside a cell).
+mutate  Score test-suite strength: corrupt each unit via <units>/mutation.toml's
+        mutator command and require the array to notice. Exit 0 iff all units are
+        mutation-strong. Deliberately expensive; never runs as part of `run`.
 ";
 
 fn arg_value(args: &[String], flag: &str) -> Option<String> {
@@ -38,6 +42,7 @@ fn main() -> ExitCode {
         Some("run") => cmd_run(&args[1..]),
         Some("verify") => cmd_verify(&args[1..]),
         Some("tap") => cmd_tap(&args[1..]),
+        Some("mutate") => cmd_mutate(&args[1..]),
         Some("--help") | Some("-h") | Some("help") => {
             println!("{USAGE}");
             ExitCode::SUCCESS
@@ -191,6 +196,75 @@ fn cmd_tap(args: &[String]) -> ExitCode {
         Ok((tap, success)) => {
             print!("{tap}");
             if success {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn cmd_mutate(args: &[String]) -> ExitCode {
+    let Some(units) = arg_value(args, "--units") else {
+        return fail("mutate requires --units <dir>");
+    };
+    let Some(state) = arg_value(args, "--state") else {
+        return fail("mutate requires --state <dir>");
+    };
+    let seed = match arg_value(args, "--seed").map(|v| v.parse::<u64>()) {
+        None => 0,
+        Some(Ok(n)) => n,
+        Some(Err(_)) => return fail("--seed must be an integer"),
+    };
+    let units_path = PathBuf::from(&units);
+    let config = match array_test::mutation::load_mutation_config(&units_path) {
+        Ok(Some(config)) => config,
+        Ok(None) => return fail("mutate requires <units>/mutation.toml"),
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    match array_test::mutation::run_mutation(
+        &units_path,
+        &PathBuf::from(&state),
+        seed,
+        None,
+        &config,
+    ) {
+        Ok(report) => {
+            for unit in &report.units {
+                let s = &unit.score;
+                println!(
+                    "  {:<24} {}/{} killed ({}%){} — {}{}",
+                    s.unit_id,
+                    s.killed,
+                    s.mutants_run,
+                    s.score_pct,
+                    if s.skipped > 0 {
+                        format!(", {} skipped", s.skipped)
+                    } else {
+                        String::new()
+                    },
+                    if s.strong { "STRONG" } else { "WEAK" },
+                    if unit.cached { " (cached)" } else { "" }
+                );
+            }
+            println!(
+                "mutation over baseline {}: {}",
+                report.baseline_root,
+                if report.all_strong {
+                    "ALL STRONG"
+                } else {
+                    "NOT ALL STRONG"
+                }
+            );
+            if report.all_strong {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE

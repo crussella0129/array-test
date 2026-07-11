@@ -8,6 +8,7 @@ pub mod hash;
 pub mod judge;
 pub mod ledger;
 pub mod manifest;
+pub mod mutation;
 pub mod round;
 pub mod runner;
 pub mod tap;

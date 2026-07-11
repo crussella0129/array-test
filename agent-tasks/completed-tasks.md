@@ -104,6 +104,12 @@ Append-only completion log (sprint-loops convention).
   working memory). `docs/TEMPLATE.md` with the genesis ritual; CI workflow keeping the
   rot guard live on every push; fmt hygiene pass.
 
+## Sprint s12 (mutation tier)
+- [x] **T12 — Frontier-scoped mutation testing (D23).** Mutator-as-command; kill = red
+  round; memoized by (code_hash, mutator_hash, baseline_root) — the baseline root as
+  detection-surface commitment; hash-chained mutations.ndjson sidecar + audit; `mutate`
+  CLI verb. First post-freeze extension; zero frozen surfaces touched.
+
 ## Sprint s10 (v1.0.0)
 - [x] **T15b — The durable ledger + v1 freeze (D21).** Machine-independent `selfhost/`
   workspace (relative-PATH CLI cells, scripts in src/); founding rounds R1/R2 committed

@@ -118,7 +118,9 @@ runner (cleared env + seed, evidence hashing, wall-clock envelope with process-g
 kill, run-twice determinism meta-check → visible quarantine), the hash-chained
 confirmation ledger with per-round root certificates, the cache-aware round
 orchestrator (unchanged round ⇒ zero executions and a byte-identical root; a changed
-dependency ⇒ exactly the keys whose scope covers it re-run), the full scope ladder
+dependency ⇒ exactly the keys whose scope covers it re-run), the **mutation tier**
+(`array-test mutate`: a mutator command corrupts units, kill = red round, scores
+memoized by the baseline root as detection-surface commitment — D23), the full scope ladder
 (`[tests.unit|direct|closure|e2e]` with fail-fast tiers and ledger-visible Skipped),
 the sandbox (memory caps, per-cell network namespaces where the host allows, isolation
 level recorded per confirmation), `toolchain.lock` pinning, the guarantee tiers
