@@ -61,6 +61,17 @@ pub enum MutationError {
     },
     #[error("mutation config: {0}")]
     ConfigInvalid(String),
+    // F4: distinguish a spawn failure and a broken chain from generic I/O / config.
+    #[error("failed to spawn mutator {program:?}: {source}")]
+    Spawn {
+        program: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("malformed mutation line {line}: {reason}")]
+    Malformed { line: usize, reason: String },
+    #[error("mutation chain broken at seq {seq}: {reason}")]
+    ChainBroken { seq: u64, reason: String },
     #[error("baseline round is not green; mutation scores would be meaningless")]
     BaselineRed,
     #[error("mutator command failed on unit '{unit}' index {index}: exit {code:?}")]
@@ -183,18 +194,21 @@ pub fn read_mutations(paths: &StatePaths) -> Result<Vec<MutationEntry>, Mutation
     })?;
     let mut entries = Vec::new();
     let mut expected_prev = mutation_genesis();
-    for line in text.lines().filter(|l| !l.trim().is_empty()) {
-        let entry: MutationEntry = serde_json::from_str(line)
-            .map_err(|e| MutationError::ConfigInvalid(format!("malformed mutation line: {e}")))?;
+    for (i, line) in text.lines().filter(|l| !l.trim().is_empty()).enumerate() {
+        let entry: MutationEntry =
+            serde_json::from_str(line).map_err(|e| MutationError::Malformed {
+                line: i + 1,
+                reason: e.to_string(),
+            })?;
         let recomputed = Hash::leaf(
             domain::MUTATION_ENTRY,
             &mutation_canonical(entry.seq, &entry.score, entry.ts, &entry.prev),
         );
         if entry.prev != expected_prev || recomputed != entry.entry_hash {
-            return Err(MutationError::ConfigInvalid(format!(
-                "mutation chain broken at seq {}",
-                entry.seq
-            )));
+            return Err(MutationError::ChainBroken {
+                seq: entry.seq,
+                reason: "prev link or entry hash does not match".to_string(),
+            });
         }
         expected_prev = entry.entry_hash;
         entries.push(entry);
@@ -202,51 +216,50 @@ pub fn read_mutations(paths: &StatePaths) -> Result<Vec<MutationEntry>, Mutation
     Ok(entries)
 }
 
-fn append_mutation(paths: &StatePaths, score: &UnitScore) -> Result<(), MutationError> {
-    use std::io::Write;
-    let existing = read_mutations(paths)?;
-    let (prev, seq) = existing
-        .last()
-        .map(|e| (e.entry_hash, e.seq + 1))
-        .unwrap_or((mutation_genesis(), 0));
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let entry_hash = Hash::leaf(
-        domain::MUTATION_ENTRY,
-        &mutation_canonical(seq, score, ts, &prev),
-    );
-    let entry = MutationEntry {
-        seq,
-        score: score.clone(),
-        ts,
-        prev,
-        entry_hash,
-    };
-    fs::create_dir_all(paths.mutations_file.parent().unwrap()).map_err(|source| {
-        MutationError::Io {
+/// Open-once appender (F1): reads the tail at open, then O(1) per append — the O(N²)
+/// re-read-per-append bug is gone.
+struct MutationWriter {
+    path: PathBuf,
+    chain: crate::chained::ChainState,
+}
+
+impl MutationWriter {
+    fn open(paths: &StatePaths) -> Result<Self, MutationError> {
+        let existing = read_mutations(paths)?;
+        let last = existing.last().map(|e| (e.entry_hash, e.seq));
+        Ok(MutationWriter {
             path: paths.mutations_file.clone(),
-            source,
-        }
-    })?;
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&paths.mutations_file)
-        .map_err(|source| MutationError::Io {
-            path: paths.mutations_file.clone(),
-            source,
+            chain: crate::chained::ChainState::new(last, mutation_genesis()),
+        })
+    }
+
+    fn append(&mut self, score: &UnitScore) -> Result<(), MutationError> {
+        let (seq, prev) = self.chain.next();
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let entry_hash = Hash::leaf(
+            domain::MUTATION_ENTRY,
+            &mutation_canonical(seq, score, ts, &prev),
+        );
+        let entry = MutationEntry {
+            seq,
+            score: score.clone(),
+            ts,
+            prev,
+            entry_hash,
+        };
+        let line = serde_json::to_string(&entry).expect("MutationEntry serializes");
+        crate::chained::append_ndjson_line(&self.path, &line).map_err(|source| {
+            MutationError::Io {
+                path: self.path.clone(),
+                source,
+            }
         })?;
-    writeln!(
-        file,
-        "{}",
-        serde_json::to_string(&entry).expect("MutationEntry serializes")
-    )
-    .map_err(|source| MutationError::Io {
-        path: paths.mutations_file.clone(),
-        source,
-    })
+        self.chain.advance(entry_hash);
+        Ok(())
+    }
 }
 
 /// Recursive copy that refuses symlinks (same doctrine as `code_hash` hashing: a link
@@ -330,6 +343,7 @@ pub fn run_mutation(
     let ws = load_workspace(units_dir)?;
     let mhash = mutator_hash(config);
     let scratch_state = paths.mutation_work_dir.join("state");
+    let mut writer = MutationWriter::open(&paths)?;
 
     let mut units = Vec::new();
     for (id, info) in &ws.units {
@@ -340,8 +354,8 @@ pub fn run_mutation(
         }
         let key = (info.code_hash, mhash, baseline_root);
         let cache_file = cache_path(&paths, &key);
-        if let Ok(text) = fs::read_to_string(&cache_file) {
-            if let Ok(score) = serde_json::from_str::<UnitScore>(&text) {
+        {
+            if let Some(score) = crate::cache::read_cache::<UnitScore>(&cache_file) {
                 units.push(UnitOutcome {
                     score,
                     cached: true,
@@ -374,8 +388,8 @@ pub fn run_mutation(
                 .env("ARRAY_TEST_MUTANT_INDEX", index.to_string())
                 .env("ARRAY_TEST_SEED", seed.to_string())
                 .status()
-                .map_err(|source| MutationError::Io {
-                    path: PathBuf::from(program),
+                .map_err(|source| MutationError::Spawn {
+                    program: program.clone(),
                     source,
                 })?;
             match status.code() {
@@ -425,7 +439,7 @@ pub fn run_mutation(
             min_score: config.min_score,
             strong: ran > 0 && score_pct >= config.min_score,
         };
-        append_mutation(&paths, &score)?;
+        writer.append(&score)?;
         fs::create_dir_all(&paths.mutation_cache_dir).map_err(|source| MutationError::Io {
             path: paths.mutation_cache_dir.clone(),
             source,

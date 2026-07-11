@@ -50,6 +50,17 @@ pub enum FuzzError {
     },
     #[error("fuzz config: {0}")]
     ConfigInvalid(String),
+    // F4: distinguish spawn / malformed-line / chain-broken from generic I/O.
+    #[error("failed to spawn fuzzer {program:?}: {source}")]
+    Spawn {
+        program: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("malformed fuzz line {line}: {reason}")]
+    Malformed { line: usize, reason: String },
+    #[error("fuzz chain broken at seq {seq}: {reason}")]
+    ChainBroken { seq: u64, reason: String },
     #[error("fuzzer failed on unit '{unit}': exit {code:?}")]
     FuzzerFailed { unit: String, code: Option<i32> },
     #[error("io error on {path}: {source}")]
@@ -143,18 +154,20 @@ pub fn read_fuzz_entries(paths: &StatePaths) -> Result<Vec<FuzzEntry>, FuzzError
     })?;
     let mut entries = Vec::new();
     let mut expected_prev = fuzz_genesis();
-    for line in text.lines().filter(|l| !l.trim().is_empty()) {
-        let entry: FuzzEntry = serde_json::from_str(line)
-            .map_err(|e| FuzzError::ConfigInvalid(format!("malformed fuzz line: {e}")))?;
+    for (i, line) in text.lines().filter(|l| !l.trim().is_empty()).enumerate() {
+        let entry: FuzzEntry = serde_json::from_str(line).map_err(|e| FuzzError::Malformed {
+            line: i + 1,
+            reason: e.to_string(),
+        })?;
         let recomputed = Hash::leaf(
             domain::FUZZ_ENTRY,
             &fuzz_canonical(entry.seq, &entry.outcome, entry.ts, &entry.prev),
         );
         if entry.prev != expected_prev || recomputed != entry.entry_hash {
-            return Err(FuzzError::ConfigInvalid(format!(
-                "fuzz chain broken at seq {}",
-                entry.seq
-            )));
+            return Err(FuzzError::ChainBroken {
+                seq: entry.seq,
+                reason: "prev link or entry hash does not match".to_string(),
+            });
         }
         expected_prev = entry.entry_hash;
         entries.push(entry);
@@ -162,44 +175,45 @@ pub fn read_fuzz_entries(paths: &StatePaths) -> Result<Vec<FuzzEntry>, FuzzError
     Ok(entries)
 }
 
-fn append_fuzz(paths: &StatePaths, outcome: &FuzzOutcomeRecord) -> Result<(), FuzzError> {
-    use std::io::Write;
-    let file = paths.fuzz_file.clone();
-    let existing = read_fuzz_entries(paths)?;
-    let (prev, seq) = existing
-        .last()
-        .map(|e| (e.entry_hash, e.seq + 1))
-        .unwrap_or((fuzz_genesis(), 0));
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let entry_hash = Hash::leaf(domain::FUZZ_ENTRY, &fuzz_canonical(seq, outcome, ts, &prev));
-    let entry = FuzzEntry {
-        seq,
-        outcome: outcome.clone(),
-        ts,
-        prev,
-        entry_hash,
-    };
-    fs::create_dir_all(file.parent().unwrap()).map_err(|source| FuzzError::Io {
-        path: file.clone(),
-        source,
-    })?;
-    let mut f = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&file)
-        .map_err(|source| FuzzError::Io {
-            path: file.clone(),
+/// Open-once appender (F1): O(1) per append, mirroring the confirmations/judgments
+/// writers — the O(N²) re-read-per-append bug is gone.
+struct FuzzWriter {
+    path: PathBuf,
+    chain: crate::chained::ChainState,
+}
+
+impl FuzzWriter {
+    fn open(paths: &StatePaths) -> Result<Self, FuzzError> {
+        let existing = read_fuzz_entries(paths)?;
+        let last = existing.last().map(|e| (e.entry_hash, e.seq));
+        Ok(FuzzWriter {
+            path: paths.fuzz_file.clone(),
+            chain: crate::chained::ChainState::new(last, fuzz_genesis()),
+        })
+    }
+
+    fn append(&mut self, outcome: &FuzzOutcomeRecord) -> Result<(), FuzzError> {
+        let (seq, prev) = self.chain.next();
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let entry_hash = Hash::leaf(domain::FUZZ_ENTRY, &fuzz_canonical(seq, outcome, ts, &prev));
+        let entry = FuzzEntry {
+            seq,
+            outcome: outcome.clone(),
+            ts,
+            prev,
+            entry_hash,
+        };
+        let line = serde_json::to_string(&entry).expect("FuzzEntry serializes");
+        crate::chained::append_ndjson_line(&self.path, &line).map_err(|source| FuzzError::Io {
+            path: self.path.clone(),
             source,
         })?;
-    writeln!(
-        f,
-        "{}",
-        serde_json::to_string(&entry).expect("FuzzEntry serializes")
-    )
-    .map_err(|source| FuzzError::Io { path: file, source })
+        self.chain.advance(entry_hash);
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -227,6 +241,7 @@ pub fn run_fuzz(
     let paths = StatePaths::new(state_dir);
     let fhash = fuzzer_hash(config);
     let cache_dir = state_dir.join("fuzz-cache");
+    let mut writer = FuzzWriter::open(&paths)?;
 
     let mut units = Vec::new();
     for (id, info) in &ws.units {
@@ -240,17 +255,14 @@ pub fn run_fuzz(
             info.fixtures_hash.hex()
         ));
         // Only CLEAN results are cacheable: a findings run changed the corpus, so its
-        // key is already stale by construction.
-        if key_file.exists() {
-            if let Ok(record) = serde_json::from_str::<FuzzOutcomeRecord>(
-                &fs::read_to_string(&key_file).unwrap_or_default(),
-            ) {
-                units.push(FuzzUnitOutcome {
-                    record,
-                    cached: true,
-                });
-                continue;
-            }
+        // key is already stale by construction. F6: a corrupt/unreadable cache is now
+        // surfaced, not silenced by `unwrap_or_default()`.
+        if let Some(record) = crate::cache::read_cache::<FuzzOutcomeRecord>(&key_file) {
+            units.push(FuzzUnitOutcome {
+                record,
+                cached: true,
+            });
+            continue;
         }
 
         let corpus_dir = info.dir.join("fixtures").join("fuzz");
@@ -268,8 +280,8 @@ pub fn run_fuzz(
             .env("ARRAY_TEST_SEED", seed.to_string())
             .env("ARRAY_TEST_FUZZ_BUDGET", config.budget_secs.to_string())
             .status()
-            .map_err(|source| FuzzError::Io {
-                path: PathBuf::from(program),
+            .map_err(|source| FuzzError::Spawn {
+                program: program.clone(),
                 source,
             })?;
         let findings = match status.code() {
@@ -292,7 +304,7 @@ pub fn run_fuzz(
             fixtures_after,
             findings,
         };
-        append_fuzz(&paths, &record)?;
+        writer.append(&record)?;
         if !findings {
             fs::create_dir_all(&cache_dir).map_err(|source| FuzzError::Io {
                 path: cache_dir.clone(),

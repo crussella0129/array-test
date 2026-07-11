@@ -264,8 +264,7 @@ fn cache_path(cache_dir: &Path, cell_key: &Hash) -> PathBuf {
 }
 
 fn cache_read(cache_dir: &Path, cell_key: &Hash) -> Option<CachedConfirmation> {
-    let text = fs::read_to_string(cache_path(cache_dir, cell_key)).ok()?;
-    let cached: CachedConfirmation = serde_json::from_str(&text).ok()?;
+    let cached: CachedConfirmation = crate::cache::read_cache(&cache_path(cache_dir, cell_key))?;
     (cached.cell_key == *cell_key).then_some(cached)
 }
 
