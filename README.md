@@ -23,7 +23,7 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
 **TAP** as a language-agnostic evidence contract (`decisions.md` D8).
 
 ## Sprint-loop state
-- `decisions.md` — architectural decision log (D1–D31).
+- `decisions.md` — architectural decision log (D1–D34).
 - `confidence.txt` — sprint-loop confidence throttle.
 - `agent-tasks/` — active backlog + completion log.
 - `sprints/sN/` — per-sprint research report + locked build/test plans + meta. All closed
@@ -49,7 +49,8 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
 - `s13` — the fuzz tier (T13, D24), using the frozen `fixtures_hash` slot.
 - `s14` — read-only-FS cells (T3c, mount_setattr, env-gated) + a contract-checker example.
 
-**Refactoring pass (s15–s20), driven by an external review (D26).**
+**Refactoring pass (s15–s22), working through an external review (D26); every finding
+substantiated or its premise corrected in the log.**
 - `s15` — hygiene: LICENSE, `repr(u8)` on the frozen scope enum (F7), Cargo metadata,
   curated clippy lints.
 - `s16` — test honesty: capability-gated tests are `#[ignore]` + a privileged CI job (F11,
@@ -60,16 +61,21 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
   containment (F16), trust-boundary docs (F17/F21) — D29.
 - `s18` — typed the manifest scope keys so an unknown scope is a parse error (F2, D30);
   freeze-neutral.
-- `s19` — decomposed the three longest functions along their seams (F3, D31);
+- `s19`/`s22` — decomposed the four longest functions along their seams (F3, D31/D33);
   behavior-preserving.
+- `s21` — single-pass evidence audit + brought this README current (D32).
+
+**Proving the tiers (s23).**
+- `s23` — made the `proved` guarantee tier **live** (T8b, D34): a committed CBMC
+  bounded-model-checking cell (`examples/proved-cbmc/`) that verifies its claim over the
+  whole input space, run for real in CI.
 
 ## Building & running
 ```
 cargo build
-cargo test      # 130 tests (+3 #[ignore], run in the privileged CI job); per-sprint
+cargo test      # 131 tests (+5 #[ignore], run in the privileged CI job); per-sprint
                 # acceptance criteria live under sprints/*/sprint-plans/
 cargo clippy --all-targets -- -D warnings
-cargo clippy --all-targets
 
 # Execute a regression round over a workspace of units; exit 0 iff green:
 array-test run --units <units-dir> --state <state-dir> [--seed N] [--toolchain-hash blake3:HEX]
@@ -122,8 +128,8 @@ and full verification.
 itself through its own CLI — commits to them permanently, and a rot-guard test audits
 that history on every run. Post-freeze extension is by sidecar and by value (D20).
 
-Sprints **s0–s20** all closed green — 130 tests (+3 `#[ignore]` capability tests run in a
-privileged CI job), and the system is **self-hosting**: array-test runs its own test suite
+Sprints **s0–s23** all closed green — 131 tests (+5 `#[ignore]` capability tests run in a
+privileged CI job; 136 with Hypothesis + CBMC provisioned), and the system is **self-hosting**: array-test runs its own test suite
 as a cell (through the `tap` evidence adapter), passes its own determinism meta-check, and
 certifies a green root over itself — then reuses that confirmation on the next round. Under
 the hood: domain-separated
@@ -142,7 +148,8 @@ slot — D24), the full scope ladder
 the sandbox (memory caps, per-cell network namespaces where the host allows, isolation
 level recorded per confirmation), `toolchain.lock` pinning, the guarantee tiers
 (declared `example|property|proved` levels — with a real derandomized Hypothesis
-property cell passing the meta-check), the **two-phase confirmation gate** (`judge.toml`
+property cell **and** a live CBMC bounded-model-checking `proved` cell, both passing the
+meta-check; see `examples/proved-cbmc/`), the **two-phase confirmation gate** (`judge.toml`
 → an N-runs-vs-threshold judge command with hash-chained `judgments.ndjson`, critique
 transcripts, and verdicts cached by `(cell_key, judge_hash)`), the **repair micro-loop**
 (a rejected unit is patched from its critique and the next attempt is simply another

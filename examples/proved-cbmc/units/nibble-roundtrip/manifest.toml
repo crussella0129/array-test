@@ -1,0 +1,15 @@
+id = "nibble-roundtrip"
+version = "1.0.0"
+
+# A proved-tier cell: the command runs CBMC over src/prove.c and emits TAP. Declaring
+# `guarantee = "proved"` records that level in the ledger and re-keys the cell if it
+# changes (D17). The hermetic runner clears the environment, so PATH is declared
+# explicitly (D12: only declared vars reach the child) — CBMC and /bin/sh live here on a
+# standard Linux host.
+[tests.unit]
+command = ["/bin/sh", "src/run-proof.sh"]
+guarantee = "proved"
+timeout_secs = 120
+
+[tests.unit.env]
+PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
