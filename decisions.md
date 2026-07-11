@@ -564,3 +564,30 @@ ignored; clippy -D warnings + fmt clean.
 **Note:** kept the `BTreeMap<CellScope, _>` shape rather than a struct-of-`Option`s — the map
 preserves every call site's `.get`/`.values`/`.is_empty` semantics for a smaller, obviously
 byte-neutral diff, and `toml` deserializes enum map keys cleanly.
+
+## D31 — Decompose the three longest functions along their natural seams (s19, F3)
+**Context:** F3 flagged over-long functions. The three worst were `full_audit` (153 lines),
+`run_mutation` (139), and `run_round` (131) — each a coherent algorithm, but each folding
+several independent concerns into one body where a reader has to hold all of them at once.
+**Decision:** Extract along the seams the code already has, behavior-preserving (no byte,
+no ledger, no key change — pure readability/testability):
+- **`full_audit`** → four phase helpers over one shared `AuditReport`: `audit_confirmations`
+  (returns the verified entries the later phases reuse), `audit_roots`, `audit_sidecar_chains`
+  (judgments/mutations/fuzz), `audit_evidence`. The top function is now a four-line
+  narrative of the audit; each surface is independently readable and testable.
+- **`run_round`** → `resolve_cell`, lifting the per-cell frontier decision (gated-skip /
+  cache-hit / hermetic-run-store-cache, incl. quarantine) out of the tier-gating loop. The
+  loop now reads as *gating*; the cell economics read as *one function*.
+- **`run_mutation`** → a borrowing `MutationRun<'a>` context struct (the run-wide invariants:
+  units_dir, paths, config, toolchain, seed, baseline_root, mutator_hash) with `score_unit`
+  (per-unit tally → `UnitScore`) and `evaluate_mutant` (one mutant → a `MutantOutcome`
+  enum: Killed / Survived / Skipped). The context struct is deliberate: passing the seven
+  invariants as arguments would trip `clippy::too_many_arguments` and re-thread them at
+  every call — the struct names the run once and the methods stay small.
+**Deferred (documented):** `run_cell` (128, runner.rs) — the fork/exec + namespace sandbox.
+Its privileged paths are `#[ignore]`-gated (run only in the privileged CI job), so a
+decomposition there carries more regression risk per line than the three above; left for a
+focused pass rather than bundled with lower-risk work.
+**Verification:** 130 pass / 3 ignored; clippy -D warnings + fmt clean. The behavior-fixing
+tests (t16_audit, t12_mutation, t5*/round) are the witnesses that nothing moved but the
+seams.

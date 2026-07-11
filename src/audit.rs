@@ -33,31 +33,48 @@ impl AuditReport {
 }
 
 /// Audit every verifiable surface of a state dir: the confirmations chain, every root
-/// certificate, the judgments chain, and the evidence store.
+/// certificate, the sidecar chains (judgments/mutations/fuzz), and the evidence store.
+///
+/// Each surface is an independent phase over one shared [`AuditReport`]; the phases are
+/// factored out below so each can be read — and tested — on its own (F3). Order matters
+/// only in that later phases reuse the verified `entries` the first phase returns.
 pub fn full_audit(state_dir: &Path) -> AuditReport {
     let paths = StatePaths::new(state_dir);
     let mut report = AuditReport::default();
 
-    // 1. Confirmations chain (every entry re-hashed, every link).
-    let entries: Vec<LedgerEntry> = if paths.ledger_file.exists() {
-        match load_and_verify(&paths.ledger_file) {
-            Ok(entries) => {
-                report.confirmations = entries.len();
-                entries
-            }
-            Err(e) => {
-                report.problems.push(format!("confirmations ledger: {e}"));
-                Vec::new()
-            }
-        }
-    } else {
-        report.notes.push("no confirmations ledger present".into());
-        Vec::new()
-    };
+    let entries = audit_confirmations(&paths, &mut report);
+    audit_roots(&paths, &mut report, &entries);
+    audit_sidecar_chains(&paths, &mut report);
+    audit_evidence(&paths, &mut report, &entries);
 
-    // 2. Every root certificate must match a recomputation from its round's entries.
+    report
+}
+
+/// Phase 1: the confirmations chain — every entry re-hashed, every link checked. Returns
+/// the verified entries (empty on absence or failure) for the later phases to reuse.
+fn audit_confirmations(paths: &StatePaths, report: &mut AuditReport) -> Vec<LedgerEntry> {
+    if !paths.ledger_file.exists() {
+        report.notes.push("no confirmations ledger present".into());
+        return Vec::new();
+    }
+    match load_and_verify(&paths.ledger_file) {
+        Ok(entries) => {
+            report.confirmations = entries.len();
+            entries
+        }
+        Err(e) => {
+            report.problems.push(format!("confirmations ledger: {e}"));
+            Vec::new()
+        }
+    }
+}
+
+/// Phase 2: every root certificate must match a recomputation from its round's entries,
+/// and every ledger round should have a certificate (a missing one is a note, not a
+/// violation — a crash between ledger-append and certificate-write leaves exactly that).
+fn audit_roots(paths: &StatePaths, report: &mut AuditReport, entries: &[LedgerEntry]) {
     let mut by_round: BTreeMap<u32, Vec<LedgerEntry>> = BTreeMap::new();
-    for entry in &entries {
+    for entry in entries {
         by_round.entry(entry.round).or_default().push(entry.clone());
     }
     if paths.roots_dir.exists() {
@@ -94,9 +111,8 @@ pub fn full_audit(state_dir: &Path) -> AuditReport {
         }
     }
 
-    // F16: rounds present in the ledger but lacking a certificate (e.g. a crash
-    // between ledger-append and certificate-write) are worth a note — not an
-    // integrity violation, but silence isn't a note either.
+    // F16: rounds present in the ledger but lacking a certificate are worth a note —
+    // not an integrity violation, but silence isn't a note either.
     let mut uncertified: Vec<u32> = by_round
         .keys()
         .filter(|round| !paths.roots_dir.join(format!("R{round}.json")).exists())
@@ -113,26 +129,29 @@ pub fn full_audit(state_dir: &Path) -> AuditReport {
                 .join(", ")
         ));
     }
+}
 
-    // 3. Judgments chain (§7.3): audited even though never rooted.
-    match read_judgments(&paths) {
+/// Phase 3: the sidecar chains — judgments (§7.3), mutations (T12/D23), fuzz (T13/D24).
+/// Each is audited even though none is rooted; a broken chain is a problem, a count note.
+fn audit_sidecar_chains(paths: &StatePaths, report: &mut AuditReport) {
+    match read_judgments(paths) {
         Ok(judgments) => report.judgments = judgments.len(),
         Err(e) => report.problems.push(format!("judgments ledger: {e}")),
     }
-
-    // 3b. Mutations sidecar (T12, D23) — same treatment.
-    match crate::mutation::read_mutations(&paths) {
+    match crate::mutation::read_mutations(paths) {
         Ok(mutations) => report.mutations = mutations.len(),
         Err(e) => report.problems.push(format!("mutations ledger: {e}")),
     }
-
-    // 3c. Fuzz sidecar (T13, D24).
-    match crate::fuzz::read_fuzz_entries(&paths) {
+    match crate::fuzz::read_fuzz_entries(paths) {
         Ok(entries) => report.fuzz_entries = entries.len(),
         Err(e) => report.problems.push(format!("fuzz ledger: {e}")),
     }
+}
 
-    // 4. Evidence store: content-addressed, so every file must re-hash to its name.
+/// Phase 4: the evidence store — content-addressed, so every file must re-hash to its
+/// name; conversely a ledger entry without stored evidence is a note (quarantined/skipped
+/// evidence is legitimately never stored), not a violation.
+fn audit_evidence(paths: &StatePaths, report: &mut AuditReport, entries: &[LedgerEntry]) {
     if paths.evidence_dir.exists() {
         match fs::read_dir(&paths.evidence_dir) {
             Ok(dir) => {
@@ -179,12 +198,9 @@ pub fn full_audit(state_dir: &Path) -> AuditReport {
         .filter(|e| !stored.contains(&e.evidence_hash.hex()))
         .count();
     if missing > 0 {
-        // Informational: quarantined/skipped evidence is legitimately never stored.
         report.notes.push(format!(
             "{missing} ledger entr{} without stored evidence (quarantined/skipped/legacy)",
             if missing == 1 { "y" } else { "ies" }
         ));
     }
-
-    report
 }

@@ -15,8 +15,11 @@
 //! dep, seed, or toolchain re-mutates exactly when it should, and nothing else does.
 
 use crate::hash::{domain, Hash};
-use crate::round::{load_workspace, resolve_toolchain, run_round, RoundError, StatePaths};
+use crate::round::{
+    load_workspace, resolve_toolchain, run_round, RoundError, StatePaths, UnitInfo,
+};
 use serde::{Deserialize, Serialize};
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -325,6 +328,135 @@ pub struct MutationReport {
 /// generate mutants and score kills. Scratch rounds share one state under
 /// `mutation-work/`, so unrelated cells hit cache after the first mutant — the
 /// frontier economics apply inside the mutation run too.
+/// Whether one mutant was detected (the round went red), survived (stayed green), or
+/// wasn't a real mutant at all (the mutator declined the index, or left the unit
+/// byte-identical) and so contributes nothing to the score.
+enum MutantOutcome {
+    Killed,
+    Survived,
+    Skipped,
+}
+
+/// Run-wide context shared across every unit and mutant of one `run_mutation` call —
+/// lifted out so the per-unit and per-mutant steps read as methods rather than a nested
+/// 130-line loop (F3). Holds only what is invariant for the whole invocation.
+struct MutationRun<'a> {
+    units_dir: &'a Path,
+    paths: &'a StatePaths,
+    config: &'a MutationConfig,
+    scratch_state: PathBuf,
+    resolved_toolchain: Option<Hash>,
+    seed: u64,
+    baseline_root: Hash,
+    mhash: Hash,
+}
+
+impl MutationRun<'_> {
+    /// Score one unit: run each mutant index, tally killed/skipped/ran, and fold the
+    /// counts into a [`UnitScore`] (strong ⇔ enough mutants ran and enough were killed).
+    fn score_unit(&self, id: &str, info: &UnitInfo) -> Result<UnitScore, MutationError> {
+        let unit_dir_name = info
+            .dir
+            .file_name()
+            .expect("unit dir has a name")
+            .to_owned();
+        let (mut killed, mut skipped, mut ran) = (0u32, 0u32, 0u32);
+        for index in 0..self.config.mutants {
+            match self.evaluate_mutant(id, &unit_dir_name, info.code_hash, index)? {
+                MutantOutcome::Killed => {
+                    killed += 1;
+                    ran += 1;
+                }
+                MutantOutcome::Survived => ran += 1,
+                MutantOutcome::Skipped => skipped += 1,
+            }
+        }
+        let score_pct = (killed * 100).checked_div(ran).unwrap_or(0);
+        Ok(UnitScore {
+            unit_id: id.to_string(),
+            code_hash: info.code_hash,
+            mutator_hash: self.mhash,
+            baseline_root: self.baseline_root,
+            mutants_run: ran,
+            killed,
+            skipped,
+            score_pct,
+            min_score: self.config.min_score,
+            strong: ran > 0 && score_pct >= self.config.min_score,
+        })
+    }
+
+    /// Evaluate a single mutant: copy the workspace, apply the mutator to the copy, and —
+    /// only if it really changed the unit — measure whether a full round over the mutant
+    /// workspace goes red (killed) or stays green (survived). A declined index or a
+    /// no-op mutation is Skipped. The scratch copy is always cleaned up.
+    fn evaluate_mutant(
+        &self,
+        id: &str,
+        unit_dir_name: &OsStr,
+        code_hash: Hash,
+        index: u32,
+    ) -> Result<MutantOutcome, MutationError> {
+        let work_units = self
+            .paths
+            .mutation_work_dir
+            .join(format!("{}-{index}", id.replace('/', "_")));
+        let _ = fs::remove_dir_all(&work_units);
+        copy_dir(self.units_dir, &work_units)?;
+        let mutant_unit_dir = work_units.join(unit_dir_name);
+
+        let program = &self.config.command[0];
+        let status = Command::new(program)
+            .args(&self.config.command[1..])
+            .env("ARRAY_TEST_UNIT_DIR", &mutant_unit_dir)
+            .env("ARRAY_TEST_MUTANT_INDEX", index.to_string())
+            .env("ARRAY_TEST_SEED", self.seed.to_string())
+            .status()
+            .map_err(|source| MutationError::Spawn {
+                program: program.clone(),
+                source,
+            })?;
+        match status.code() {
+            Some(0) => {}
+            Some(NO_MUTANT_EXIT) => {
+                let _ = fs::remove_dir_all(&work_units);
+                return Ok(MutantOutcome::Skipped);
+            }
+            code => {
+                return Err(MutationError::MutatorFailed {
+                    unit: id.to_string(),
+                    index,
+                    code,
+                });
+            }
+        }
+
+        // A mutant that didn't change the unit isn't a mutant.
+        if crate::hash::compute_code_hash(&mutant_unit_dir)
+            .map(|h| h == code_hash)
+            .unwrap_or(false)
+        {
+            let _ = fs::remove_dir_all(&work_units);
+            return Ok(MutantOutcome::Skipped);
+        }
+
+        let round = run_round(
+            &work_units,
+            &self.scratch_state,
+            None,
+            self.seed,
+            self.resolved_toolchain,
+        )?;
+        let outcome = if round.record.all_pass {
+            MutantOutcome::Survived
+        } else {
+            MutantOutcome::Killed
+        };
+        let _ = fs::remove_dir_all(&work_units);
+        Ok(outcome)
+    }
+}
+
 pub fn run_mutation(
     units_dir: &Path,
     state_dir: &Path,
@@ -337,12 +469,19 @@ pub fn run_mutation(
         return Err(MutationError::BaselineRed);
     }
     let baseline_root = baseline.record.root;
-    let resolved_toolchain = Some(resolve_toolchain(units_dir, toolchain));
 
     let paths = StatePaths::new(state_dir);
     let ws = load_workspace(units_dir)?;
-    let mhash = mutator_hash(config);
-    let scratch_state = paths.mutation_work_dir.join("state");
+    let run = MutationRun {
+        units_dir,
+        paths: &paths,
+        config,
+        scratch_state: paths.mutation_work_dir.join("state"),
+        resolved_toolchain: Some(resolve_toolchain(units_dir, toolchain)),
+        seed,
+        baseline_root,
+        mhash: mutator_hash(config),
+    };
     let mut writer = MutationWriter::open(&paths)?;
 
     let mut units = Vec::new();
@@ -352,93 +491,17 @@ pub fn run_mutation(
         if info.manifest.test.is_none() && info.manifest.tests.is_empty() {
             continue;
         }
-        let key = (info.code_hash, mhash, baseline_root);
+        let key = (info.code_hash, run.mhash, baseline_root);
         let cache_file = cache_path(&paths, &key);
-        {
-            if let Some(score) = crate::cache::read_cache::<UnitScore>(&cache_file) {
-                units.push(UnitOutcome {
-                    score,
-                    cached: true,
-                });
-                continue;
-            }
+        if let Some(score) = crate::cache::read_cache::<UnitScore>(&cache_file) {
+            units.push(UnitOutcome {
+                score,
+                cached: true,
+            });
+            continue;
         }
 
-        let unit_dir_name = info
-            .dir
-            .file_name()
-            .expect("unit dir has a name")
-            .to_owned();
-        let mut killed = 0u32;
-        let mut skipped = 0u32;
-        let mut ran = 0u32;
-
-        for index in 0..config.mutants {
-            let work_units = paths
-                .mutation_work_dir
-                .join(format!("{}-{index}", id.replace('/', "_")));
-            let _ = fs::remove_dir_all(&work_units);
-            copy_dir(units_dir, &work_units)?;
-            let mutant_unit_dir = work_units.join(&unit_dir_name);
-
-            let program = &config.command[0];
-            let status = Command::new(program)
-                .args(&config.command[1..])
-                .env("ARRAY_TEST_UNIT_DIR", &mutant_unit_dir)
-                .env("ARRAY_TEST_MUTANT_INDEX", index.to_string())
-                .env("ARRAY_TEST_SEED", seed.to_string())
-                .status()
-                .map_err(|source| MutationError::Spawn {
-                    program: program.clone(),
-                    source,
-                })?;
-            match status.code() {
-                Some(0) => {}
-                Some(NO_MUTANT_EXIT) => {
-                    skipped += 1;
-                    let _ = fs::remove_dir_all(&work_units);
-                    continue;
-                }
-                code => {
-                    return Err(MutationError::MutatorFailed {
-                        unit: id.clone(),
-                        index,
-                        code,
-                    });
-                }
-            }
-
-            // A mutant that didn't change the unit isn't a mutant.
-            if crate::hash::compute_code_hash(&mutant_unit_dir)
-                .map(|h| h == info.code_hash)
-                .unwrap_or(false)
-            {
-                skipped += 1;
-                let _ = fs::remove_dir_all(&work_units);
-                continue;
-            }
-
-            let round = run_round(&work_units, &scratch_state, None, seed, resolved_toolchain)?;
-            if !round.record.all_pass {
-                killed += 1;
-            }
-            ran += 1;
-            let _ = fs::remove_dir_all(&work_units);
-        }
-
-        let score_pct = (killed * 100).checked_div(ran).unwrap_or(0);
-        let score = UnitScore {
-            unit_id: id.clone(),
-            code_hash: info.code_hash,
-            mutator_hash: mhash,
-            baseline_root,
-            mutants_run: ran,
-            killed,
-            skipped,
-            score_pct,
-            min_score: config.min_score,
-            strong: ran > 0 && score_pct >= config.min_score,
-        };
+        let score = run.score_unit(id, info)?;
         writer.append(&score)?;
         fs::create_dir_all(&paths.mutation_cache_dir).map_err(|source| MutationError::Io {
             path: paths.mutation_cache_dir.clone(),

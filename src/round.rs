@@ -397,6 +397,66 @@ fn now_unix_secs() -> u64 {
         .unwrap_or(0)
 }
 
+/// Resolve one planned cell to its `(status, evidence, outcome-kind)` — the frontier
+/// economics of a single cell, lifted out of [`run_round`]'s tier loop (F3). Three paths:
+/// gated (Skipped, never cached — D15), cache hit (Reused), or a hermetic run whose
+/// evidence is stored and whose reproducible verdicts are cached (D13). Quarantine stores
+/// both disagreeing transcripts and records the first (F9).
+fn resolve_cell(
+    paths: &StatePaths,
+    plan: &CellPlan,
+    gate_broken: bool,
+    skipped_evidence: Hash,
+) -> Result<(DetStatus, Hash, CellOutcomeKind), RoundError> {
+    if gate_broken {
+        // D15: skipping is state, not silence — and never cached.
+        return Ok((
+            DetStatus::Skipped,
+            skipped_evidence,
+            CellOutcomeKind::Skipped,
+        ));
+    }
+    if let Some(cached) = cache_read(&paths.cache_dir, &plan.spec.cell_key) {
+        return Ok((
+            cached.det_status,
+            cached.evidence_hash,
+            CellOutcomeKind::Reused,
+        ));
+    }
+    let (status, evidence_hash) = match run_cell_checked(&plan.spec)? {
+        Verdict::Confirmed(outcome) => {
+            let status = match outcome.status {
+                RunStatus::Pass => DetStatus::Pass,
+                RunStatus::Fail { .. } => DetStatus::Fail,
+                RunStatus::TimedOut => DetStatus::TimedOut,
+            };
+            // Evidence store (s7 §2.5): the root must be backed by retrievable bytes,
+            // not hashes of discarded data.
+            store_evidence(&paths.evidence_dir, &outcome)?;
+            (status, outcome.evidence_hash)
+        }
+        Verdict::Quarantined { first, second } => {
+            // F9: quarantine means "these two disagreed" — both transcripts ARE the
+            // evidence; store both, record the first's hash in the ledger as before.
+            store_evidence(&paths.evidence_dir, &first)?;
+            store_evidence(&paths.evidence_dir, &second)?;
+            (DetStatus::Quarantined, first.evidence_hash)
+        }
+    };
+    // D13: only reproducible verdicts enter the cache.
+    if matches!(status, DetStatus::Pass | DetStatus::Fail) {
+        cache_write(
+            &paths.cache_dir,
+            &CachedConfirmation {
+                cell_key: plan.spec.cell_key,
+                det_status: status,
+                evidence_hash,
+            },
+        )?;
+    }
+    Ok((status, evidence_hash, CellOutcomeKind::Executed))
+}
+
 /// Execute one regression round: plan cells tier-by-tier, reuse every confirmation
 /// whose key is cached, hermetically run the rest, gate higher tiers behind lower-tier
 /// failures (Skipped, D15), append everything to the ledger (reuse + isolation level
@@ -448,58 +508,8 @@ pub fn run_round(
         }
 
         let ts = now_unix_secs();
-        let (det_status, evidence_hash, kind) = if gate_broken {
-            // D15: skipping is state, not silence — and never cached.
-            (
-                DetStatus::Skipped,
-                skipped_evidence,
-                CellOutcomeKind::Skipped,
-            )
-        } else {
-            match cache_read(&paths.cache_dir, &plan.spec.cell_key) {
-                Some(cached) => (
-                    cached.det_status,
-                    cached.evidence_hash,
-                    CellOutcomeKind::Reused,
-                ),
-                None => {
-                    let verdict = run_cell_checked(&plan.spec)?;
-                    let (status, evidence_hash) = match verdict {
-                        Verdict::Confirmed(outcome) => {
-                            let status = match outcome.status {
-                                RunStatus::Pass => DetStatus::Pass,
-                                RunStatus::Fail { .. } => DetStatus::Fail,
-                                RunStatus::TimedOut => DetStatus::TimedOut,
-                            };
-                            // Evidence store (s7 §2.5): the root must be backed by
-                            // retrievable bytes, not hashes of discarded data.
-                            store_evidence(&paths.evidence_dir, &outcome)?;
-                            (status, outcome.evidence_hash)
-                        }
-                        Verdict::Quarantined { first, second } => {
-                            // F9: quarantine means "these two disagreed" — both
-                            // transcripts ARE the evidence; store both, record the
-                            // first's hash in the ledger as before.
-                            store_evidence(&paths.evidence_dir, &first)?;
-                            store_evidence(&paths.evidence_dir, &second)?;
-                            (DetStatus::Quarantined, first.evidence_hash)
-                        }
-                    };
-                    // D13: only reproducible verdicts enter the cache.
-                    if matches!(status, DetStatus::Pass | DetStatus::Fail) {
-                        cache_write(
-                            &paths.cache_dir,
-                            &CachedConfirmation {
-                                cell_key: plan.spec.cell_key,
-                                det_status: status,
-                                evidence_hash,
-                            },
-                        )?;
-                    }
-                    (status, evidence_hash, CellOutcomeKind::Executed)
-                }
-            }
-        };
+        let (det_status, evidence_hash, kind) =
+            resolve_cell(&paths, plan, gate_broken, skipped_evidence)?;
 
         // Status gates, not freshness: a reused Fail closes higher tiers too.
         if det_status != DetStatus::Pass {
