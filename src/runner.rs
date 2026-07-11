@@ -208,7 +208,7 @@ impl Evidence {
         framed.extend_from_slice(&self.stderr);
         // None (killed by signal / no exit code) encodes as i32::MIN — a value no real
         // process exit can produce, so the sentinel cannot collide with a status.
-        framed.extend_from_slice(&(self.exit_code.unwrap_or(i32::MIN) as i64).to_le_bytes());
+        framed.extend_from_slice(&i64::from(self.exit_code.unwrap_or(i32::MIN)).to_le_bytes());
         framed
     }
 

@@ -443,3 +443,34 @@ polices what reads smuggle in.
 post-invariants and re-keys whenever any of them change (contracts are inside
 `code_hash`). The contract tier is a convention with a live, CI-guarded example — not
 an engine feature, which is exactly the point.
+
+## D26 — Adopt the Super Z refactoring plan as the s15–s22 roadmap (s15)
+**Context:** An external code-review pass (Super Z) produced a 42-finding refactoring
+plan framed as sprints s15–s22, all post-freeze extensions. The plan is well-reasoned
+and its findings are real; adopting it as the roadmap.
+**Decision:** Work the plan in its proposed order, but apply engineering judgment per
+finding rather than executing verbatim — the plan invites this (§1: "a clippy pedantic
+run will surface additional items"). s15 = foundation & hygiene quick wins:
+- **F24 LICENSE (MIT)** — the highest-impact item: D22's template ambition is legally
+  void without it. Copyright crussella0129.
+- **F7 `#[repr(u8)]` on `CellScope`** — freeze-hardening. *Correcting the plan's
+  framing:* the discriminants were already explicit (`Unit = 0…`), so the `as u8` cast
+  was already stable and no truncation was reachable; `#[repr(u8)]` pins the
+  representation as *guaranteed* and forbids a future reorder from silently moving a
+  cell key. Byte-preserving; rot guard confirms.
+- **F5** `canonical_bytes` now takes `&ConfirmationInput` (10 args → 3, suppression
+  gone), byte layout unchanged.
+- **F15** subcommand error message single-sourced from a `SUBCOMMANDS` const.
+- **F10** the env-leak test uses ambient `HOME` instead of mutating process-global env
+  (racy under parallel tests; `unsafe` in edition 2024).
+- **F26/F27** Cargo metadata (license/repo/keywords/categories/rust-version),
+  `.gitignore` hardening, `.gitattributes` (`eol=lf` so a Windows clone can't change a
+  committed script's `code_hash`; ledger/evidence marked binary).
+- **F8, scoped deliberately:** full `clippy::pedantic` is **130 warnings**, dominated by
+  `must_use_candidate`/`missing_errors_doc`/`module_name_repetitions` noise — enabling
+  it under CI's `-D warnings` would force a disproportionate 130-fix diff. Adopted a
+  *curated* high-signal set via Cargo's `[lints.clippy]` table (single source, all
+  targets): `uninlined_format_args`, `redundant_closure_for_method_calls`,
+  `semicolon_if_nothing_returned`, `unnested_or_patterns`, `cast_lossless`. Full
+  pedantic left as a deliberate non-goal.
+**Zero frozen surfaces changed** (F5/F7 are byte-preserving; rot guard `t15b` verifies).

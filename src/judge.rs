@@ -183,7 +183,7 @@ fn judgment_canonical(seq: u64, round: u32, j: &CellJudgment, ts: u64, prev: &Ha
     out.extend_from_slice(j.judge_hash.as_bytes());
     out.extend_from_slice(&j.pass_runs.to_le_bytes());
     out.extend_from_slice(&j.total_runs.to_le_bytes());
-    out.push(j.verdict as u8);
+    out.push(u8::from(j.verdict));
     out.extend_from_slice(&(j.critique_ref.len() as u64).to_le_bytes());
     out.extend_from_slice(j.critique_ref.as_bytes());
     out.extend_from_slice(&ts.to_le_bytes());

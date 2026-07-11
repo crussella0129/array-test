@@ -47,13 +47,20 @@ fn main() -> ExitCode {
         Some("tap") => cmd_tap(&args[1..]),
         Some("mutate") => cmd_mutate(&args[1..]),
         Some("fuzz") => cmd_fuzz(&args[1..]),
-        Some("--help") | Some("-h") | Some("help") => {
+        Some("--help" | "-h" | "help") => {
             println!("{USAGE}");
             ExitCode::SUCCESS
         }
-        _ => fail("expected a subcommand: run | verify"),
+        _ => fail(&format!(
+            "expected a subcommand: {}",
+            SUBCOMMANDS.join(" | ")
+        )),
     }
 }
+
+/// The valid subcommands, single-sourced so the error message can never drift from the
+/// dispatch table again (F15).
+const SUBCOMMANDS: &[&str] = &["run", "verify", "tap", "mutate", "fuzz"];
 
 fn cmd_run(args: &[String]) -> ExitCode {
     let Some(units) = arg_value(args, "--units") else {

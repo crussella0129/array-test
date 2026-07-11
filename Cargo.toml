@@ -2,7 +2,25 @@
 name = "array-test"
 version = "1.0.0"
 edition = "2021"
+rust-version = "1.77"
 description = "A deterministic, code-based, provable regression system for agentic software construction."
+license = "MIT"
+repository = "https://github.com/crussella0129/array-test"
+readme = "README.md"
+keywords = ["testing", "regression", "content-addressing", "deterministic", "agentic"]
+categories = ["development-tools::testing", "command-line-utilities"]
+
+# Curated high-signal lints, enforced across all targets via Cargo's [lints] table
+# (single source, no per-crate-root attributes). Full `clippy::pedantic` is deliberately
+# NOT adopted: ~130 warnings on this codebase are dominated by must_use_candidate /
+# missing_errors_doc / module_name_repetitions noise, disproportionate to the value.
+# These are the lints that catch real style regressions cheaply (F8).
+[lints.clippy]
+uninlined_format_args = "deny"
+redundant_closure_for_method_calls = "deny"
+semicolon_if_nothing_returned = "deny"
+unnested_or_patterns = "deny"
+cast_lossless = "deny"
 
 [dependencies]
 blake3 = "1"

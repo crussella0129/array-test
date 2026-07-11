@@ -24,7 +24,7 @@ fn refs<'a>(units: &'a [(&'static str, Vec<String>)]) -> Vec<(&'static str, &'a 
 }
 
 fn set(items: &[&str]) -> BTreeSet<String> {
-    items.iter().map(|s| s.to_string()).collect()
+    items.iter().map(std::string::ToString::to_string).collect()
 }
 
 #[test]

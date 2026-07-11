@@ -1,0 +1,9 @@
+# Determinism reaches the working tree: normalize line endings so a Windows clone
+# cannot change a committed script's bytes (and thus its code_hash). The durable
+# ledger at selfhost/state commits to these exact bytes (D21).
+* text=auto eol=lf
+
+# Ledger and evidence artifacts are exact bytes — never touch them.
+selfhost/state/** -text
+*.ndjson -text
+*.evidence -text

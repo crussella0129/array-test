@@ -125,7 +125,7 @@ fn fuzz_canonical(seq: u64, o: &FuzzOutcomeRecord, ts: u64, prev: &Hash) -> Vec<
     out.extend_from_slice(o.fuzzer_hash.as_bytes());
     out.extend_from_slice(o.fixtures_before.as_bytes());
     out.extend_from_slice(o.fixtures_after.as_bytes());
-    out.push(o.findings as u8);
+    out.push(u8::from(o.findings));
     out.extend_from_slice(&ts.to_le_bytes());
     out.extend_from_slice(prev.as_bytes());
     out
