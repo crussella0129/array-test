@@ -23,38 +23,52 @@ root, judge gate, CLI) + **Python (Hypothesis)** for property-based tests, conne
 **TAP** as a language-agnostic evidence contract (`decisions.md` D8).
 
 ## Sprint-loop state
-- `decisions.md` — architectural decision log (D1–D8).
+- `decisions.md` — architectural decision log (D1–D31).
 - `confidence.txt` — sprint-loop confidence throttle.
 - `agent-tasks/` — active backlog + completion log.
-- `sprints/s0/` — design sprint (closed, green): research report + locked build/test plans.
-- `sprints/s1/` — closed, green: research (riteway investigation, two-phase confirmation
-  gate, toolchain lock) + T1/T2 built and tested.
-- `sprints/s2/` — closed, green: testing-practice survey (10 topics, adoption map in D10)
-  + refactor: domain-separated hashing (D9), filesystem determinism, manifest validation,
-  `topo_order()`.
-- `sprints/s3/` — closed, green: embedding contract (D11), hermetic cell runner (T3,
-  v1 isolation level per D12), hash-chained confirmation ledger + array root (T4).
-- `sprints/s4/` — closed, green: round orchestrator + cache (T5, semantics in D13) and
-  the standalone CLI (T11) — the first real `R_k`.
-- `sprints/s5/` — closed, green: TAP evidence adapter (T6, principle in D14) and the
-  self-hosting milestone (T15): array-test certifies its own test suite.
-- `sprints/s6/` — closed, green: scope ladder (T5b, D15), sandbox with recorded
-  isolation levels (T3b, D16), toolchain.lock pinning (R-h closed).
-- `sprints/s7/` — closed, green: guarantee tiers — property tier with real Hypothesis
-  (T7), `proved` schema (T8), Phase-J judge gate (T9, D17), repair micro-loop (T10,
-  D18), content-addressed evidence store.
-- `sprints/s8/` — closed, green: full-audit verifier (D19 — every root certificate,
-  judgments chain, evidence store) + the committed `examples/quickstart` workspace.
-- `sprints/s9/` — closed, green: review+refactor (findings F8–F16: sentinel hygiene,
-  quarantine transparency, ledger-derived rounds, trust model §7.4) + the sequencing
-  determination (D20): extension is by sidecar and by value; T15b next.
-- `sprints/s10/` — closed, green: **v1.0.0** — the durable self-host ledger
-  (`selfhost/state`, rot-guarded) froze the `array-test/v1/*` contexts (D21).
+- `sprints/sN/` — per-sprint research report + locked build/test plans + meta. All closed
+  green; highlights below.
+
+**Kernel (s0–s10) → v1.0.0.**
+- `s0–s2` — design + testing-practice survey (D10); T1/T2 (content addressing, DAG);
+  domain-separated hashing (D9), filesystem determinism, manifest validation.
+- `s3–s5` — embedding contract (D11); hermetic cell runner (T3, D12); hash-chained
+  ledger + array root (T4); round orchestrator + cache (T5, D13); CLI (T11); TAP evidence
+  adapter (T6, D14); self-hosting (T15).
+- `s6–s7` — scope ladder (T5b, D15); sandbox + recorded isolation (T3b, D16);
+  `toolchain.lock`; guarantee tiers (T7 Hypothesis, T8 `proved`); Phase-J judge (T9, D17);
+  repair micro-loop (T10, D18); evidence store.
+- `s8–s10` — full-audit verifier (D19); `examples/quickstart`; review+refactor + the
+  sidecar/value sequencing rule (D20); **v1.0.0** — the durable, rot-guarded self-host
+  ledger froze the `array-test/v1/*` contexts (D21).
+
+**Post-freeze extensions & the template (s11–s14).**
+- `s11` — templatization: `docs/TEMPLATE.md`, the genesis ritual, CI, D22 (the repo is
+  two templates in one).
+- `s12` — the mutation tier (T12, D23) — the first post-freeze sidecar extension.
+- `s13` — the fuzz tier (T13, D24), using the frozen `fixtures_hash` slot.
+- `s14` — read-only-FS cells (T3c, mount_setattr, env-gated) + a contract-checker example.
+
+**Refactoring pass (s15–s20), driven by an external review (D26).**
+- `s15` — hygiene: LICENSE, `repr(u8)` on the frozen scope enum (F7), Cargo metadata,
+  curated clippy lints.
+- `s16` — test honesty: capability-gated tests are `#[ignore]` + a privileged CI job (F11,
+  D27), not silent skips.
+- `s17` — fixed the O(N²) sidecar appends via open-once writers on a shared chain
+  primitive (F1, D28); a shared cache helper (F6); typed errors (F4).
+- `s20` — security: `id` path-traversal validation (F18), defensive state-path
+  containment (F16), trust-boundary docs (F17/F21) — D29.
+- `s18` — typed the manifest scope keys so an unknown scope is a parse error (F2, D30);
+  freeze-neutral.
+- `s19` — decomposed the three longest functions along their seams (F3, D31);
+  behavior-preserving.
 
 ## Building & running
 ```
 cargo build
-cargo test      # AC1-AC38 (per-sprint test plans under sprints/*/sprint-plans/)
+cargo test      # 130 tests (+3 #[ignore], run in the privileged CI job); per-sprint
+                # acceptance criteria live under sprints/*/sprint-plans/
+cargo clippy --all-targets -- -D warnings
 cargo clippy --all-targets
 
 # Execute a regression round over a workspace of units; exit 0 iff green:
@@ -108,10 +122,11 @@ and full verification.
 itself through its own CLI — commits to them permanently, and a rot-guard test audits
 that history on every run. Post-freeze extension is by sidecar and by value (D20).
 
-Sprints **s0–s10** all closed green — 109 tests, and the system is **self-hosting**:
-array-test runs its own test suite as a cell (through the `tap` evidence adapter),
-passes its own determinism meta-check, and certifies a green root over itself — then
-reuses that confirmation on the next round. Under the hood: domain-separated
+Sprints **s0–s20** all closed green — 130 tests (+3 `#[ignore]` capability tests run in a
+privileged CI job), and the system is **self-hosting**: array-test runs its own test suite
+as a cell (through the `tap` evidence adapter), passes its own determinism meta-check, and
+certifies a green root over itself — then reuses that confirmation on the next round. Under
+the hood: domain-separated
 `code_hash`/`cell_key` content addressing (frozen `array-test/v1/...` contexts),
 validated manifest/contract schemas, the integration DAG resolver, the hermetic cell
 runner (cleared env + seed, evidence hashing, wall-clock envelope with process-group
@@ -120,7 +135,9 @@ confirmation ledger with per-round root certificates, the cache-aware round
 orchestrator (unchanged round ⇒ zero executions and a byte-identical root; a changed
 dependency ⇒ exactly the keys whose scope covers it re-run), the **mutation tier**
 (`array-test mutate`: a mutator command corrupts units, kill = red round, scores
-memoized by the baseline root as detection-surface commitment — D23), the full scope ladder
+memoized by the baseline root as detection-surface commitment — D23), the **fuzz tier**
+(a fuzzer command over per-unit `fixtures/`, committed through the frozen `fixtures_hash`
+slot — D24), the full scope ladder
 (`[tests.unit|direct|closure|e2e]` with fail-fast tiers and ledger-visible Skipped),
 the sandbox (memory caps, per-cell network namespaces where the host allows, isolation
 level recorded per confirmation), `toolchain.lock` pinning, the guarantee tiers

@@ -152,6 +152,10 @@ fn audit_sidecar_chains(paths: &StatePaths, report: &mut AuditReport) {
 /// name; conversely a ledger entry without stored evidence is a note (quarantined/skipped
 /// evidence is legitimately never stored), not a violation.
 fn audit_evidence(paths: &StatePaths, report: &mut AuditReport, entries: &[LedgerEntry]) {
+    // Single enumeration of the store (was two): hash-check each file AND collect its
+    // content-address stem in the same pass, so the "missing evidence" note below can be
+    // answered without re-reading the directory.
+    let mut stored: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     if paths.evidence_dir.exists() {
         match fs::read_dir(&paths.evidence_dir) {
             Ok(dir) => {
@@ -160,6 +164,7 @@ fn audit_evidence(paths: &StatePaths, report: &mut AuditReport, entries: &[Ledge
                     let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                         continue;
                     };
+                    stored.insert(stem.to_string());
                     let Ok(bytes) = fs::read(&path) else {
                         report
                             .problems
@@ -181,18 +186,6 @@ fn audit_evidence(paths: &StatePaths, report: &mut AuditReport, entries: &[Ledge
                 .push(format!("evidence dir unreadable: {e}")),
         }
     }
-    let stored: std::collections::BTreeSet<String> = fs::read_dir(&paths.evidence_dir)
-        .map(|dir| {
-            dir.filter_map(std::result::Result::ok)
-                .filter_map(|e| {
-                    e.path()
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .map(String::from)
-                })
-                .collect()
-        })
-        .unwrap_or_default();
     let missing = entries
         .iter()
         .filter(|e| !stored.contains(&e.evidence_hash.hex()))

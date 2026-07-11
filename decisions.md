@@ -591,3 +591,29 @@ focused pass rather than bundled with lower-risk work.
 **Verification:** 130 pass / 3 ignored; clippy -D warnings + fmt clean. The behavior-fixing
 tests (t16_audit, t12_mutation, t5*/round) are the witnesses that nothing moved but the
 seams.
+
+## D32 — Perf cleanup + documentation currency, re-derived from the code (s21)
+**Context:** The external refactoring plan's last two clusters were performance and
+docs/archival. That plan was attached in chat and never committed, so rather than guess at
+its F-numbers, this sprint re-derives the work from the code directly (the same measure-first
+method used for the F3 decomposition) and records it honestly as re-derived.
+**Perf — single, defensible structural fix:**
+- `audit_evidence` enumerated the evidence directory **twice**: once to hash-check every
+  file, then again to collect the set of stored content-address stems for the
+  "missing evidence" note. Folded into **one** `read_dir` pass — the stem set is now built
+  during the hash-check loop. Behavior is identical (the second pass only ever read
+  `file_stem`, which the first pass already extracts; unreadable files still contribute
+  their stem, matching the old set exactly). This is cold-path I/O, not a hot loop — chosen
+  because it is a clean win with zero behavior risk. The tempting `by_round` clone in
+  `audit_roots` was **left alone**: eliminating it would force `RootRecord::from_entries`
+  to take `&[&LedgerEntry]`, rippling the ledger API for negligible gain on the same cold
+  audit path. No hot-path change was manufactured — the engine's real performance story is
+  the frontier/caching economics (only changed cells re-run), which is the core design, not
+  something a micro-opt would improve.
+**Docs — currency:** the README's "Sprint-loop state" and "Status" had frozen at
+**D1–D8 / s0–s10 / 109 tests**. Brought current: D1–D31, sprints s0–s20 (condensed, grouped
+kernel / post-freeze / refactoring pass), 130 tests (+3 ignored), and the fuzz tier (T13/D24)
+which the status blurb had never mentioned. A repo offered as a template must not describe a
+past version of itself.
+**Verification:** 130 pass / 3 ignored; clippy -D warnings + fmt clean; t16_audit is the
+witness that the single-pass audit is behavior-identical.
