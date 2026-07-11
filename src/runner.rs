@@ -13,7 +13,7 @@ use crate::hash::{domain, Hash};
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
@@ -260,12 +260,10 @@ pub enum RunError {
     Io(#[from] std::io::Error),
 }
 
-/// Execute one cell hermetically (v1 level — see module docs) and capture evidence.
-pub fn run_cell(spec: &CellSpec) -> Result<RunOutcome, RunError> {
-    let program = spec.command.first().ok_or(RunError::EmptyCommand {
-        cell_key: spec.cell_key,
-    })?;
-
+/// Build the fully-configured child command for a cell: cleared env + the hygiene set +
+/// declared vars + seed, piped stdio, and (on unix) the process-group + sandbox `pre_exec`.
+/// Lifted out of [`run_cell`] so the spawn/wait/classify flow reads on its own (F3).
+fn build_cell_command(spec: &CellSpec, program: &str) -> Command {
     let mut cmd = Command::new(program);
     cmd.args(&spec.command[1..])
         .current_dir(&spec.cwd)
@@ -280,49 +278,95 @@ pub fn run_cell(spec: &CellSpec) -> Result<RunOutcome, RunError> {
         cmd.env(k, v);
     }
     cmd.env("ARRAY_TEST_SEED", spec.seed.to_string());
-
-    // On unix the cell runs as its own process group so an envelope breach kills the
-    // whole tree — killing only the direct child leaves grandchildren holding the
-    // output pipes open (and running), which both hangs evidence collection and lets
-    // work escape the envelope.
     #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        cmd.process_group(0);
+    install_sandbox(&mut cmd, spec);
+    cmd
+}
 
-        let mem_limit = spec.mem_limit_mb;
-        let net_flags = netns_flags();
-        // T3c/D25: declared-env opt-in for a recursively read-only filesystem.
-        let fs_readonly = spec.env.get(FS_READONLY_ENV).map(String::as_str) == Some("1");
-        unsafe {
-            cmd.pre_exec(move || {
-                if let Some(mb) = mem_limit {
-                    let bytes = mb.saturating_mul(1024 * 1024);
-                    let limit = libc::rlimit {
-                        rlim_cur: bytes,
-                        rlim_max: bytes,
-                    };
-                    if libc::setrlimit(libc::RLIMIT_AS, &limit) != 0 {
-                        return Err(std::io::Error::last_os_error());
-                    }
-                }
-                // Fail closed (D16): if the host can isolate, a cell that cannot be
-                // isolated does not run. Same doctrine for the read-only flag: a cell
-                // that declared RO and can't get it does not run.
-                let mut flags = net_flags.unwrap_or(0);
-                if fs_readonly {
-                    flags |= libc::CLONE_NEWNS;
-                }
-                if flags != 0 && libc::unshare(flags) != 0 {
+/// Install the unix sandbox on `cmd`: run the cell in its own process group (so an
+/// envelope breach kills the whole tree, not just the direct child, which would leave
+/// grandchildren holding the output pipes open and running) and register a `pre_exec`
+/// hook applying the memory cap, network-namespace unshare, and read-only mount (D16/D25).
+///
+/// # Safety
+/// `pre_exec` runs in the forked child *after* `fork` and *before* `exec`. Its body only
+/// invokes async-signal-safe libc (`setrlimit`, `unshare`, `mount` via
+/// [`fs_ro::make_root_readonly`]) and moves already-owned `Copy`/heap-free captures — no
+/// allocation, no non-reentrant libc, no shared-state mutation. It fails closed: any
+/// isolation the host cannot grant aborts the spawn rather than running an unisolated cell.
+#[cfg(unix)]
+fn install_sandbox(cmd: &mut Command, spec: &CellSpec) {
+    use std::os::unix::process::CommandExt;
+    cmd.process_group(0);
+
+    let mem_limit = spec.mem_limit_mb;
+    let net_flags = netns_flags();
+    // T3c/D25: declared-env opt-in for a recursively read-only filesystem.
+    let fs_readonly = spec.env.get(FS_READONLY_ENV).map(String::as_str) == Some("1");
+    unsafe {
+        cmd.pre_exec(move || {
+            if let Some(mb) = mem_limit {
+                let bytes = mb.saturating_mul(1024 * 1024);
+                let limit = libc::rlimit {
+                    rlim_cur: bytes,
+                    rlim_max: bytes,
+                };
+                if libc::setrlimit(libc::RLIMIT_AS, &limit) != 0 {
                     return Err(std::io::Error::last_os_error());
                 }
-                if fs_readonly {
-                    fs_ro::make_root_readonly()?;
-                }
-                Ok(())
-            });
-        }
+            }
+            // Fail closed (D16): if the host can isolate, a cell that cannot be isolated
+            // does not run. Same doctrine for the read-only flag: a cell that declared RO
+            // and can't get it does not run.
+            let mut flags = net_flags.unwrap_or(0);
+            if fs_readonly {
+                flags |= libc::CLONE_NEWNS;
+            }
+            if flags != 0 && libc::unshare(flags) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if fs_readonly {
+                fs_ro::make_root_readonly()?;
+            }
+            Ok(())
+        });
     }
+}
+
+/// Wait for the cell's child, enforcing the wall-clock envelope. On breach, SIGKILL the
+/// whole process group (negative pid — see `process_group(0)` in [`install_sandbox`]) so
+/// no grandchild escapes, then reap. Returns the exit status (None if killed) and whether
+/// the envelope was breached.
+fn wait_with_envelope(
+    child: &mut Child,
+    timeout: Duration,
+    start: Instant,
+) -> Result<(Option<ExitStatus>, bool), RunError> {
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok((Some(status), false));
+        }
+        if start.elapsed() >= timeout {
+            #[cfg(unix)]
+            unsafe {
+                // Negative pid = the whole process group.
+                libc::kill(-(child.id() as i32), libc::SIGKILL);
+            }
+            let _ = child.kill();
+            child.wait()?;
+            return Ok((None, true));
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// Execute one cell hermetically (v1 level — see module docs) and capture evidence.
+pub fn run_cell(spec: &CellSpec) -> Result<RunOutcome, RunError> {
+    let program = spec.command.first().ok_or(RunError::EmptyCommand {
+        cell_key: spec.cell_key,
+    })?;
+
+    let mut cmd = build_cell_command(spec, program);
 
     let start = Instant::now();
     let mut child = cmd.spawn().map_err(|source| RunError::Spawn {
@@ -344,24 +388,7 @@ pub fn run_cell(spec: &CellSpec) -> Result<RunOutcome, RunError> {
         buf
     });
 
-    let mut timed_out = false;
-    let exit_status = loop {
-        if let Some(status) = child.try_wait()? {
-            break Some(status);
-        }
-        if start.elapsed() >= spec.timeout {
-            timed_out = true;
-            #[cfg(unix)]
-            unsafe {
-                // Negative pid = the whole process group (see process_group(0) above).
-                libc::kill(-(child.id() as i32), libc::SIGKILL);
-            }
-            let _ = child.kill();
-            child.wait()?;
-            break None;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    };
+    let (exit_status, timed_out) = wait_with_envelope(&mut child, spec.timeout, start)?;
     let duration = start.elapsed();
 
     let stdout = stdout_thread.join().unwrap_or_default();
