@@ -71,6 +71,9 @@ pub enum RoundError {
 pub struct UnitInfo {
     pub manifest: Manifest,
     pub code_hash: Hash,
+    /// T13: content hash of `<unit>/fixtures/` (sentinel when absent). Fixtures re-key
+    /// cells through their own key slot without pretending to be code.
+    pub fixtures_hash: Hash,
     pub dir: PathBuf,
 }
 
@@ -97,6 +100,7 @@ pub fn load_workspace(units_dir: &Path) -> Result<Workspace, RoundError> {
     for dir in dirs {
         let manifest = load_manifest(&dir.join("manifest.toml"))?;
         let code_hash = compute_code_hash(&dir)?;
+        let fixtures_hash = crate::hash::compute_fixtures_hash(&dir)?;
         let id = manifest.id.clone();
         if units
             .insert(
@@ -104,6 +108,7 @@ pub fn load_workspace(units_dir: &Path) -> Result<Workspace, RoundError> {
                 UnitInfo {
                     manifest,
                     code_hash,
+                    fixtures_hash,
                     dir,
                 },
             )
@@ -197,7 +202,6 @@ fn scope_dep_hashes(ws: &Workspace, topo: &[String], id: &str, scope: CellScope)
 /// topologically within each tier — the fail-fast ladder's execution order (D15).
 pub fn plan_round(ws: &Workspace, seed: u64, toolchain_hash: Hash) -> Vec<CellPlan> {
     let topo = ws.dag.topo_order();
-    let fixtures = Hash::leaf(domain::FIXTURES, b"");
     let mut plans = Vec::new();
 
     for scope in [
@@ -221,7 +225,7 @@ pub fn plan_round(ws: &Workspace, seed: u64, toolchain_hash: Hash) -> Vec<CellPl
                 scope,
                 scope_dep_hashes_in_dag_order: &dep_hashes,
                 test_def_hash: test_def_hash(test, scope),
-                fixtures_hash: fixtures,
+                fixtures_hash: unit.fixtures_hash,
                 seed,
                 toolchain_hash,
             });
@@ -347,6 +351,8 @@ pub struct StatePaths {
     pub mutations_file: PathBuf,
     pub mutation_cache_dir: PathBuf,
     pub mutation_work_dir: PathBuf,
+    /// T13 sidecar (added post-freeze, D20-legal).
+    pub fuzz_file: PathBuf,
 }
 
 impl StatePaths {
@@ -363,6 +369,7 @@ impl StatePaths {
             mutations_file: state_dir.join("ledger").join("mutations.ndjson"),
             mutation_cache_dir: state_dir.join("mutation-cache"),
             mutation_work_dir: state_dir.join("mutation-work"),
+            fuzz_file: state_dir.join("ledger").join("fuzz.ndjson"),
         }
     }
 }

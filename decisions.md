@@ -400,3 +400,25 @@ GitHub "Template repository" setting is a human step, noted in the doc.
 `true` test lets 2/2 survive (weak — the exact pathology the tier exists to expose);
 an unchanged workspace re-mutates nothing; tampering with a recorded score breaks the
 chain.
+
+## D24 — The fuzz tier; fixtures become real (s13, T13)
+**Context:** `fixtures_hash` had been a frozen key slot filled with a sentinel since
+s4. A fuzz corpus IS a fixture set (s2 §2.6).
+**Decision:**
+- **Fixtures:** `<unit>/fixtures/` content-hashes into the slot (same normalized,
+  symlink-rejecting walk as `code_hash`; root under the existing FIXTURES context —
+  role prefixes keep it distinct from the sentinel). **No fixture files ⇒ the
+  sentinel** — the hash covers content, so an empty/absent dir are the same claim and
+  every pre-T13 workspace keeps its keys. Value-level change to a frozen slot;
+  D20-legal. (First implementation hashed empty-present ≠ absent; the cache test
+  caught it — creating a corpus dir must be hash-neutral.)
+- **The fuzzer is a command** (fourth use of the pattern): `fuzz.toml`
+  command/budget_secs; exit 0 clean, exit 65 = findings **written into
+  `fixtures/fuzz/`**. The loop closes through content addressing exactly as s2
+  predicted: findings move `fixtures_hash` → cells re-key → the next round tests the
+  grown corpus. No coupling beyond the filesystem.
+- Clean results cache under `(code_hash, fuzzer_hash, fixtures_hash)`; the contract
+  requires seed-determinism within budget (a nondeterministic fuzzer only wastes its
+  own cache). Sidecar `fuzz.ndjson` + contexts + audit coverage; `fuzz` CLI verb.
+**Proven by test:** a finding grows the corpus and flips the next round red until the
+bug is fixed; clean units cache; tampered entries break the chain.

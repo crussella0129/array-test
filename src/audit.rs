@@ -22,6 +22,7 @@ pub struct AuditReport {
     pub roots_checked: usize,
     pub judgments: usize,
     pub mutations: usize,
+    pub fuzz_entries: usize,
     pub evidence_files: usize,
 }
 
@@ -123,6 +124,12 @@ pub fn full_audit(state_dir: &Path) -> AuditReport {
     match crate::mutation::read_mutations(&paths) {
         Ok(mutations) => report.mutations = mutations.len(),
         Err(e) => report.problems.push(format!("mutations ledger: {e}")),
+    }
+
+    // 3c. Fuzz sidecar (T13, D24).
+    match crate::fuzz::read_fuzz_entries(&paths) {
+        Ok(entries) => report.fuzz_entries = entries.len(),
+        Err(e) => report.problems.push(format!("fuzz ledger: {e}")),
     }
 
     // 4. Evidence store: content-addressed, so every file must re-hash to its name.

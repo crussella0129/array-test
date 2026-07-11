@@ -4,6 +4,7 @@
 pub mod audit;
 pub mod contract;
 pub mod dag;
+pub mod fuzz;
 pub mod hash;
 pub mod judge;
 pub mod ledger;
