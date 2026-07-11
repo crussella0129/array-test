@@ -20,10 +20,10 @@ jobs:
       - run: cargo test
       - run: cargo clippy --all-targets -- -D warnings
 
-  # F11: the three headline features gated on host capabilities (network namespaces,
-  # read-only mounts, real Hypothesis property testing) are marked #[ignore] so the
-  # job above cannot falsely pass them. This privileged job actually exercises them —
-  # otherwise a regression in the runner's isolation setup would ship green.
+  # F11/T8b: features gated on host capabilities (network namespaces, read-only mounts,
+  # real Hypothesis property testing, and the live CBMC `proved`-tier proof) are marked
+  # #[ignore] so the job above cannot falsely pass them. This privileged job installs the
+  # tools and actually exercises them — otherwise a regression would ship green.
   privileged-tests:
     runs-on: ubuntu-latest
     container:
@@ -31,6 +31,6 @@ jobs:
       options: --privileged --cap-add=SYS_ADMIN
     steps:
       - uses: actions/checkout@v4
-      - run: apt-get update && apt-get install -y python3-pip
+      - run: apt-get update && apt-get install -y python3-pip cbmc
       - run: pip install --break-system-packages hypothesis || pip install hypothesis
       - run: cargo test -- --ignored

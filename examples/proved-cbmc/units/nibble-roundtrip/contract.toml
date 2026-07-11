@@ -1,0 +1,5 @@
+# A proved-tier unit declares the property it verifies; the engine records the guarantee
+# level and Phase J audits it (D17) — the engine does not itself interpret the property.
+[properties]
+roundtrip = "combine(hi_nibble(b), lo_nibble(b)) == b  for all u8 b"
+hex_digit = "nibble_to_hex(b) is an ASCII lowercase hex digit  for all u8 b"

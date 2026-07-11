@@ -643,3 +643,36 @@ normal `test` job; `setrlimit` needs no privilege), the netns and mount branches
 **Milestone:** with this, the external refactoring plan (F1–F42) is fully worked through —
 substance done, stale premises corrected in the log, maintainability-only extras
 consciously deferred where documented.
+
+## D34 — T8b: make the `proved` tier live via CBMC (Kani's engine), through authorized egress (s23)
+**Context:** The `proved` guarantee tier (D17, §7.2) was a recorded *declaration* with no
+committed unit that actually verified something over its whole input space. T8b makes it
+live. The plan named Kani (the Rust-native model checker); provisioning it hit a hard wall.
+**The egress finding (recorded so it isn't rediscovered):** `cargo kani setup` downloads a
+release bundle from the `model-checking/kani` GitHub repo, and this session's egress policy
+scopes GitHub to `crussella0129/array-test` only — every other repo path returns 403
+(`api.github.com/repos/model-checking/kani/...` and the release-download path both 403;
+the scoped repo returns 200). That is the same deliberate repo-scope restriction that
+governs the session, not a fixable config issue, so routing around it via the reachable
+`objects`/`raw` CDNs was rejected.
+**Decision:** Use **CBMC** — the C bounded model checker that Kani wraps — installed from
+the Ubuntu archive (authorized egress). This gives the `proved` tier a genuine, live
+symbolic proof through an allowed channel, and CBMC being Kani's own engine makes it a
+faithful realization, not a downgrade.
+- Committed `examples/proved-cbmc/units/nibble-roundtrip/`: a C harness with a
+  nondeterministic byte (CBMC checks all 256 values at once) proving the hex-nibble
+  round-trip identity + hex-digit validity — the invariant behind `Hash::hex`. A wrapper
+  emits deterministic TAP (CBMC's timing-bearing output is discarded so the run-twice
+  meta-check sees byte-identical evidence). Manifest declares `guarantee = "proved"`.
+- `tests/t8b_proved.rs`: a non-ignored engine-plumbing test (proved level records without
+  any prover, runs everywhere) + two `#[ignore]` + self-skip tests (D27) — the real proof
+  passes and records `Guarantee::Proved`; a **falsified** harness (a refutable assertion)
+  turns the round red, proving the proof proves something. Validated live this session with
+  CBMC installed (VERIFICATION SUCCESSFUL; the bug case VERIFICATION FAILED → red).
+- CI: the `privileged-tests` job now `apt-get install`s `cbmc` and runs it via `--ignored`,
+  so the live proof runs in CI — not theater.
+**Honesty:** this is the D14/D19/D27 doctrine applied to a headline claim — the `proved`
+tier now *demonstrably* verifies over the whole input space in CI, and where the prover is
+absent the tests read as *ignored*, never falsely passed. 131 pass / 5 ignored normally;
+136 with CBMC. Kani (Rust path) remains a future addition if its bundle host is ever
+authorized; the tier is prover-agnostic by design.
