@@ -4,6 +4,7 @@
 //! (`hash::compute_code_hash`), never authored, so it can never drift from the content it
 //! is supposed to address.
 
+use crate::hash::CellScope;
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -23,14 +24,13 @@ pub struct Manifest {
     /// both is a validation error.
     #[serde(default)]
     pub test: Option<TestSpec>,
-    /// Per-scope tests: keys are `unit` | `direct` | `closure` | `e2e` (D15). A unit
-    /// with `[tests.e2e]` is thereby an entrypoint declaration (§1.4). Units without
-    /// any test contribute code (and dep hashes) but no cell of their own.
+    /// Per-scope tests: keys are `unit` | `direct` | `closure` | `e2e` (D15), typed as
+    /// [`CellScope`] so an unknown scope is a parse error, not a runtime check (F2). A unit
+    /// with `[tests.e2e]` is thereby an entrypoint declaration (§1.4). Units without any
+    /// test contribute code (and dep hashes) but no cell of their own.
     #[serde(default)]
-    pub tests: std::collections::BTreeMap<String, TestSpec>,
+    pub tests: std::collections::BTreeMap<CellScope, TestSpec>,
 }
-
-pub const VALID_SCOPES: &[&str] = &["unit", "direct", "closure", "e2e"];
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TestSpec {
@@ -90,13 +90,11 @@ impl Manifest {
             }
         }
         for (scope, spec) in &self.tests {
-            if !VALID_SCOPES.contains(&scope.as_str()) {
-                return Err(format!(
-                    "unknown test scope '{scope}' (expected one of: unit, direct, closure, e2e)"
-                ));
-            }
             if spec.command.is_empty() {
-                return Err(format!("tests.{scope}.command must be non-empty"));
+                return Err(format!(
+                    "tests.{}.command must be non-empty",
+                    scope.as_str()
+                ));
             }
         }
         for spec in self.test.iter().chain(self.tests.values()) {
@@ -108,7 +106,7 @@ impl Manifest {
                 }
             }
         }
-        if self.test.is_some() && self.tests.contains_key("closure") {
+        if self.test.is_some() && self.tests.contains_key(&CellScope::Closure) {
             return Err(
                 "declare either legacy [test] or [tests.closure], not both (they are the same scope)"
                     .to_string(),
