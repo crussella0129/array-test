@@ -143,13 +143,20 @@ pub fn full_audit(state_dir: &Path) -> AuditReport {
                     report.evidence_files += 1;
                 }
             }
-            Err(e) => report.problems.push(format!("evidence dir unreadable: {e}")),
+            Err(e) => report
+                .problems
+                .push(format!("evidence dir unreadable: {e}")),
         }
     }
     let stored: std::collections::BTreeSet<String> = fs::read_dir(&paths.evidence_dir)
         .map(|dir| {
             dir.filter_map(|e| e.ok())
-                .filter_map(|e| e.path().file_stem().and_then(|s| s.to_str()).map(String::from))
+                .filter_map(|e| {
+                    e.path()
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(String::from)
+                })
                 .collect()
         })
         .unwrap_or_default();

@@ -51,10 +51,7 @@ fn netns_flags() -> Option<libc::c_int> {
     *PROBE.get_or_init(|| {
         // Try root-style netns first, then unprivileged user+net namespaces. The probe
         // child attempts the unshare itself; spawn failure means "can't".
-        for flags in [
-            libc::CLONE_NEWNET,
-            libc::CLONE_NEWUSER | libc::CLONE_NEWNET,
-        ] {
+        for flags in [libc::CLONE_NEWNET, libc::CLONE_NEWUSER | libc::CLONE_NEWNET] {
             let mut cmd = Command::new("/bin/sh");
             cmd.args(["-c", "exit 0"])
                 .stdin(Stdio::null())
@@ -91,11 +88,7 @@ pub fn isolation_level() -> IsolationLevel {
 
 /// Fixed hygiene variables set for every cell, before declared `env` (which may
 /// override them deliberately — a declared override is part of the test definition).
-const HYGIENE_ENV: &[(&str, &str)] = &[
-    ("TZ", "UTC"),
-    ("LC_ALL", "C"),
-    ("SOURCE_DATE_EPOCH", "0"),
-];
+const HYGIENE_ENV: &[(&str, &str)] = &[("TZ", "UTC"), ("LC_ALL", "C"), ("SOURCE_DATE_EPOCH", "0")];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunStatus {

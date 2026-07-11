@@ -104,7 +104,11 @@ fn given_a_real_hypothesis_property_cell_should_pass_deterministically() {
     let unit = ws.path().join("prop");
     fs::create_dir_all(unit.join("src")).unwrap();
     // The unit under test: a tiny pure function...
-    fs::write(unit.join("src/impl.py"), "def add(a, b):\n    return a + b\n").unwrap();
+    fs::write(
+        unit.join("src/impl.py"),
+        "def add(a, b):\n    return a + b\n",
+    )
+    .unwrap();
     fs::write(
         unit.join("contract.toml"),
         "[properties]\ncommutative = \"add(a, b) == add(b, a)\"\n",
@@ -164,7 +168,10 @@ sys.exit(0 if ok_all else 1)
 
     // Passed BOTH runs of the determinism meta-check (derandomize did its job), with
     // the property guarantee recorded.
-    assert!(report.record.all_pass, "property cell did not pass: {report:?}");
+    assert!(
+        report.record.all_pass,
+        "property cell did not pass: {report:?}"
+    );
     let paths = StatePaths::new(state.path());
     let entries = load_and_verify(&paths.ledger_file).unwrap();
     assert_eq!(entries[0].guarantee, Guarantee::Property);

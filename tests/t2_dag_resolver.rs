@@ -17,7 +17,10 @@ fn fixture_units() -> Vec<(&'static str, Vec<String>)> {
 }
 
 fn refs<'a>(units: &'a [(&'static str, Vec<String>)]) -> Vec<(&'static str, &'a [String])> {
-    units.iter().map(|(id, deps)| (*id, deps.as_slice())).collect()
+    units
+        .iter()
+        .map(|(id, deps)| (*id, deps.as_slice()))
+        .collect()
 }
 
 fn set(items: &[&str]) -> BTreeSet<String> {

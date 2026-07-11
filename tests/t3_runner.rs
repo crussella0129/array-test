@@ -68,8 +68,10 @@ fn given_a_parent_env_var_should_not_leak_into_the_cell() {
 
 #[test]
 fn given_a_cell_should_see_seed_and_hygiene_env() {
-    let outcome = run_cell(&sh("printf '%s|%s|%s' \"$ARRAY_TEST_SEED\" \"$TZ\" \"$LC_ALL\""))
-        .unwrap();
+    let outcome = run_cell(&sh(
+        "printf '%s|%s|%s' \"$ARRAY_TEST_SEED\" \"$TZ\" \"$LC_ALL\"",
+    ))
+    .unwrap();
     assert_eq!(outcome.evidence.stdout, b"42|UTC|C");
 }
 

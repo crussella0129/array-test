@@ -358,7 +358,6 @@ impl StatePaths {
             failures_dir: state_dir.join("ledger").join("failures"),
         }
     }
-
 }
 
 /// Write an executed cell's evidence bytes under their hash (content-addressed store).
@@ -375,8 +374,7 @@ fn store_evidence(
         return Ok(()); // content-addressed: same hash, same bytes
     }
     // Exactly the framed bytes the hash covers — re-hashable by any verifier.
-    fs::write(&path, outcome.evidence.framed())
-        .map_err(|source| RoundError::Io { path, source })
+    fs::write(&path, outcome.evidence.framed()).map_err(|source| RoundError::Io { path, source })
 }
 
 fn now_unix_secs() -> u64 {
@@ -404,18 +402,21 @@ pub fn run_round(
     let skipped_evidence = Hash::leaf(domain::NO_EVIDENCE, b"skipped");
 
     let paths = StatePaths::new(state_dir);
-    fs::create_dir_all(paths.ledger_file.parent().unwrap()).map_err(|source| {
-        RoundError::Io {
-            path: paths.ledger_file.clone(),
-            source,
-        }
+    fs::create_dir_all(paths.ledger_file.parent().unwrap()).map_err(|source| RoundError::Io {
+        path: paths.ledger_file.clone(),
+        source,
     })?;
     let (mut ledger, history) = Ledger::open(&paths.ledger_file)?;
     // F10: the ledger is the state machine; certificates are outputs. Deriving the
     // round number from the roots dir would reuse a number after a crash between
     // ledger-append and certificate-write, merging two attempts under one round.
     let round = round.unwrap_or_else(|| {
-        history.iter().map(|e| e.round).max().map(|r| r + 1).unwrap_or(1)
+        history
+            .iter()
+            .map(|e| e.round)
+            .max()
+            .map(|r| r + 1)
+            .unwrap_or(1)
     });
 
     let mut round_entries: Vec<LedgerEntry> = Vec::new();

@@ -74,7 +74,10 @@ fn given_a_dep_change_a_unit_scope_cell_should_stay_reused_while_closure_reruns(
     let r2 = round(ws.path(), state.path());
 
     // b's unit-scope key excludes deps: unaffected by a. Its closure-scope key isn't.
-    assert_eq!(cell(&r2, "b", CellScope::Unit).kind, CellOutcomeKind::Reused);
+    assert_eq!(
+        cell(&r2, "b", CellScope::Unit).kind,
+        CellOutcomeKind::Reused
+    );
     assert_eq!(
         cell(&r2, "b", CellScope::Closure).kind,
         CellOutcomeKind::Executed
@@ -143,7 +146,13 @@ fn given_a_failing_unit_tier_cell_higher_tiers_should_be_skipped_but_siblings_ru
     );
     // Every higher-tier cell is Skipped — visible in the report and the ledger.
     for c in r1.cells.iter().filter(|c| c.scope != CellScope::Unit) {
-        assert_eq!(c.det_status, DetStatus::Skipped, "{}@{:?}", c.unit_id, c.scope);
+        assert_eq!(
+            c.det_status,
+            DetStatus::Skipped,
+            "{}@{:?}",
+            c.unit_id,
+            c.scope
+        );
         assert_eq!(c.kind, CellOutcomeKind::Skipped);
     }
     assert!(!r1.record.all_pass);

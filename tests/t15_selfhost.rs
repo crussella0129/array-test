@@ -48,7 +48,11 @@ fn given_our_own_t2_suite_as_a_cell_the_array_should_certify_itself_green() {
     let ws = tempdir().unwrap();
     let unit = ws.path().join("self-t2");
     fs::create_dir_all(unit.join("src")).unwrap();
-    fs::write(unit.join("src/main.txt"), "self-host: t2 dag resolver suite").unwrap();
+    fs::write(
+        unit.join("src/main.txt"),
+        "self-host: t2 dag resolver suite",
+    )
+    .unwrap();
     fs::write(unit.join("contract.toml"), "[io]\n").unwrap();
     fs::write(
         unit.join("manifest.toml"),

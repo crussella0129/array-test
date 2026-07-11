@@ -129,9 +129,11 @@ pub fn load_manifest(path: &Path) -> Result<Manifest, ManifestError> {
         path: path.to_path_buf(),
         source,
     })?;
-    manifest.validate().map_err(|reason| ManifestError::Invalid {
-        path: path.to_path_buf(),
-        reason,
-    })?;
+    manifest
+        .validate()
+        .map_err(|reason| ManifestError::Invalid {
+            path: path.to_path_buf(),
+            reason,
+        })?;
     Ok(manifest)
 }

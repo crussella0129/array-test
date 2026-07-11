@@ -41,7 +41,11 @@ fn given_a_green_workspace_run_should_exit_zero_and_write_the_certificate() {
         .output()
         .unwrap();
 
-    assert!(output.status.success(), "stdout: {stdout}", stdout = String::from_utf8_lossy(&output.stdout));
+    assert!(
+        output.status.success(),
+        "stdout: {stdout}",
+        stdout = String::from_utf8_lossy(&output.stdout)
+    );
     assert!(String::from_utf8_lossy(&output.stdout).contains("ALL PASS"));
     assert!(state.path().join("ledger/roots/R1.json").is_file());
 }

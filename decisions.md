@@ -351,3 +351,24 @@ guarantee tiers (T7b/T8b/T12/T13/T3c) extend against these stable keys per D20.
 **Honest caveats carried:** `toolchain.lock` pins the producing environment's rustc —
 other environments regenerate it (new keys, appended rounds, history unbroken);
 selfhost scripts assume a POSIX Linux userland.
+
+## D22 — The repo is a template, in two layers; instances share the hash language (s11)
+**Context:** User observation after the freeze: a self-verified kernel makes the repo
+itself a template (e.g. a GitHub template repository).
+**Determination: correct, with one word sharpened.** The kernel is *self-certifying*
+(integrity verified, truthfulness reproducible via §7.4's empty-cache re-run protocol,
+self-hosting green), not *proven correct* — the proved tier (T8b) remains future work.
+With that precision, the repo is two templates layered:
+- **Layer A — the verification kernel:** frozen engine + founding ledger + rot guard.
+  An instance writes units and has provable regression from commit one. Because v1
+  contexts are frozen, **all instances speak the same hash language**: any v1 ledger is
+  verifiable by any v1 binary, anywhere.
+- **Layer B — the method scaffold:** the sprint-loops working state (decisions,
+  sprints/, agent-tasks/) — not documentation about the work but the working memory
+  that produced it.
+**Mechanics:** `docs/TEMPLATE.md` records the layers, the instantiation steps, and the
+**genesis ritual** — an instance resets `selfhost/state`, re-pins its toolchain, runs
+two founding rounds, and commits its own D21 moment; the rot guard then protects *its*
+history. CI (`.github/workflows/ci.yml`) keeps the template's promise live: every push
+re-audits the committed ledger (fmt + build + test + clippy -D warnings). Flipping the
+GitHub "Template repository" setting is a human step, noted in the doc.

@@ -63,10 +63,7 @@ fn given_a_fresh_workspace_round_one_should_execute_everything_and_go_green() {
     assert_eq!(report.executed(), 3);
     assert_eq!(report.reused(), 0);
     assert!(report.record.all_pass);
-    assert!(state
-        .path()
-        .join("ledger/roots/R1.json")
-        .is_file());
+    assert!(state.path().join("ledger/roots/R1.json").is_file());
 }
 
 #[test]

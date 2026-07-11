@@ -140,7 +140,11 @@ fn cmd_run_judged(
                     "  judged {:<17} [{}] {} ({}/{} runs{})",
                     cell.unit_id,
                     cell.scope.as_str(),
-                    if cell.judgment.verdict { "PASS" } else { "REJECTED" },
+                    if cell.judgment.verdict {
+                        "PASS"
+                    } else {
+                        "REJECTED"
+                    },
                     cell.judgment.pass_runs,
                     cell.judgment.total_runs,
                     if cell.cached { ", cached" } else { "" }
@@ -151,7 +155,11 @@ fn cmd_run_judged(
             println!(
                 "R{}: det {} | judge {} | {} repair attempt(s) | root {}",
                 outcome.det.record.round,
-                if outcome.det.record.all_pass { "green" } else { "RED" },
+                if outcome.det.record.all_pass {
+                    "green"
+                } else {
+                    "RED"
+                },
                 if judge_green { "green" } else { "RED" },
                 outcome.repair_attempts,
                 outcome.det.record.root

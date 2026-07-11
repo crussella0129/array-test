@@ -1,0 +1,21 @@
+name: ci
+
+# The template's promise, kept live: every push re-audits the committed founding
+# ledger (tests/t15b_durable.rs) alongside the full suite — history cannot rot
+# silently on any fork or template instance.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo build --all-targets
+      - run: cargo test
+      - run: cargo clippy --all-targets -- -D warnings

@@ -141,7 +141,11 @@ fn given_a_det_red_round_the_judge_should_never_be_invoked() {
     assert!(!outcome.green);
     assert!(!outcome.det.record.all_pass);
     assert!(outcome.judged.is_empty());
-    assert_eq!(marker_count(markers.path()), 0, "Phase J entered on a det-red round");
+    assert_eq!(
+        marker_count(markers.path()),
+        0,
+        "Phase J entered on a det-red round"
+    );
 }
 
 #[test]

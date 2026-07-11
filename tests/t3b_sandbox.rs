@@ -57,7 +57,10 @@ fn given_net_isolation_a_cell_should_see_only_loopback() {
     // /proc/net/dev has 2 header lines; a fresh netns contains only lo.
     let outcome = run_cell(&sh_spec("awk 'NR>2{c++} END{print c}' /proc/net/dev", None)).unwrap();
     assert_eq!(outcome.status, RunStatus::Pass);
-    assert_eq!(String::from_utf8_lossy(&outcome.evidence.stdout).trim(), "1");
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.evidence.stdout).trim(),
+        "1"
+    );
 }
 
 fn write_green_unit(units_dir: &Path, id: &str) {

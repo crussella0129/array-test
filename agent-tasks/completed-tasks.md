@@ -98,6 +98,12 @@ Append-only completion log (sprint-loops convention).
 - [x] **Quickstart example.** `examples/quickstart/` committed (dep edge, two scopes,
   README walkthrough, judge.toml.example), guarded green by an integration test.
 
+## Sprint s11 (templatization)
+- [x] **D22 — the repo as a two-layer template.** Kernel (frozen engine + founding
+  ledger; instances share the v1 hash language) + method scaffold (the sprint-loops
+  working memory). `docs/TEMPLATE.md` with the genesis ritual; CI workflow keeping the
+  rot guard live on every push; fmt hygiene pass.
+
 ## Sprint s10 (v1.0.0)
 - [x] **T15b — The durable ledger + v1 freeze (D21).** Machine-independent `selfhost/`
   workspace (relative-PATH CLI cells, scripts in src/); founding rounds R1/R2 committed

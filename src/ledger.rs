@@ -383,8 +383,7 @@ impl RootRecord {
             round,
             root: array_root(entries),
             cells: latest.len() as u64,
-            all_pass: !latest.is_empty()
-                && latest.values().all(|s| *s == DetStatus::Pass),
+            all_pass: !latest.is_empty() && latest.values().all(|s| *s == DetStatus::Pass),
         }
     }
 

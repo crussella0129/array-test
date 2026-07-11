@@ -110,7 +110,9 @@ pub fn load_judge_config(units_dir: &Path) -> Result<Option<JudgeConfig>, JudgeE
     let config: JudgeConfig =
         toml::from_str(&text).map_err(|source| JudgeError::ConfigParse { path, source })?;
     if config.command.is_empty() {
-        return Err(JudgeError::ConfigInvalid("command must be non-empty".into()));
+        return Err(JudgeError::ConfigInvalid(
+            "command must be non-empty".into(),
+        ));
     }
     if config.runs == 0 {
         return Err(JudgeError::ConfigInvalid("runs must be >= 1".into()));
@@ -270,12 +272,17 @@ pub fn read_judgments(paths: &StatePaths) -> Result<Vec<JudgmentEntry>, JudgeErr
     let mut entries = Vec::new();
     let mut expected_prev = judgment_genesis();
     for line in text.lines().filter(|l| !l.trim().is_empty()) {
-        let entry: JudgmentEntry = serde_json::from_str(line).map_err(|e| {
-            JudgeError::ConfigInvalid(format!("malformed judgment line: {e}"))
-        })?;
+        let entry: JudgmentEntry = serde_json::from_str(line)
+            .map_err(|e| JudgeError::ConfigInvalid(format!("malformed judgment line: {e}")))?;
         let recomputed = Hash::leaf(
             domain::JUDGMENT_ENTRY,
-            &judgment_canonical(entry.seq, entry.round, &entry.judgment, entry.ts, &entry.prev),
+            &judgment_canonical(
+                entry.seq,
+                entry.round,
+                &entry.judgment,
+                entry.ts,
+                &entry.prev,
+            ),
         );
         if entry.prev != expected_prev || recomputed != entry.entry_hash {
             return Err(JudgeError::ConfigInvalid(format!(

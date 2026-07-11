@@ -20,9 +20,15 @@ fn given_appended_entries_should_load_and_verify_in_order() {
 
     let (mut ledger, existing) = Ledger::open(&path).unwrap();
     assert!(existing.is_empty());
-    ledger.append(1, key(1), DetStatus::Pass, ev(1), 100).unwrap();
-    ledger.append(1, key(2), DetStatus::Fail, ev(2), 101).unwrap();
-    ledger.append(1, key(3), DetStatus::Pass, ev(3), 102).unwrap();
+    ledger
+        .append(1, key(1), DetStatus::Pass, ev(1), 100)
+        .unwrap();
+    ledger
+        .append(1, key(2), DetStatus::Fail, ev(2), 101)
+        .unwrap();
+    ledger
+        .append(1, key(3), DetStatus::Pass, ev(3), 102)
+        .unwrap();
 
     let entries = load_and_verify(&path).unwrap();
 
@@ -39,12 +45,16 @@ fn given_a_reopened_ledger_should_continue_the_chain() {
 
     {
         let (mut ledger, _) = Ledger::open(&path).unwrap();
-        ledger.append(1, key(1), DetStatus::Pass, ev(1), 100).unwrap();
+        ledger
+            .append(1, key(1), DetStatus::Pass, ev(1), 100)
+            .unwrap();
     }
     {
         let (mut ledger, existing) = Ledger::open(&path).unwrap();
         assert_eq!(existing.len(), 1);
-        ledger.append(1, key(2), DetStatus::Pass, ev(2), 101).unwrap();
+        ledger
+            .append(1, key(2), DetStatus::Pass, ev(2), 101)
+            .unwrap();
     }
 
     let entries = load_and_verify(&path).unwrap();
@@ -58,7 +68,9 @@ fn given_a_tampered_status_byte_should_fail_verification() {
     let path = dir.path().join("confirmations.ndjson");
 
     let (mut ledger, _) = Ledger::open(&path).unwrap();
-    ledger.append(1, key(1), DetStatus::Fail, ev(1), 100).unwrap();
+    ledger
+        .append(1, key(1), DetStatus::Fail, ev(1), 100)
+        .unwrap();
 
     // Flip the recorded status from fail to pass without recomputing hashes.
     let text = fs::read_to_string(&path).unwrap();
@@ -75,8 +87,12 @@ fn given_a_truncated_ledger_head_should_fail_verification() {
     let path = dir.path().join("confirmations.ndjson");
 
     let (mut ledger, _) = Ledger::open(&path).unwrap();
-    ledger.append(1, key(1), DetStatus::Pass, ev(1), 100).unwrap();
-    ledger.append(1, key(2), DetStatus::Pass, ev(2), 101).unwrap();
+    ledger
+        .append(1, key(1), DetStatus::Pass, ev(1), 100)
+        .unwrap();
+    ledger
+        .append(1, key(2), DetStatus::Pass, ev(2), 101)
+        .unwrap();
 
     // Drop the first line: seq/prev checks must notice the missing head.
     let text = fs::read_to_string(&path).unwrap();
@@ -137,8 +153,12 @@ fn given_a_later_entry_for_the_same_cell_the_latest_status_should_win() {
     let path = dir.path().join("confirmations.ndjson");
 
     let (mut ledger, _) = Ledger::open(&path).unwrap();
-    ledger.append(1, key(1), DetStatus::Fail, ev(1), 100).unwrap();
-    ledger.append(1, key(1), DetStatus::Pass, ev(2), 200).unwrap();
+    ledger
+        .append(1, key(1), DetStatus::Fail, ev(1), 100)
+        .unwrap();
+    ledger
+        .append(1, key(1), DetStatus::Pass, ev(2), 200)
+        .unwrap();
 
     let entries = load_and_verify(&path).unwrap();
     let record = RootRecord::from_entries(1, &entries);
@@ -154,8 +174,12 @@ fn given_quarantined_or_timed_out_cells_should_be_visible_and_not_green() {
 
     let (mut ledger, _) = Ledger::open(&path).unwrap();
     ledger.append(1, key(1), DetStatus::Pass, ev(1), 1).unwrap();
-    ledger.append(1, key(2), DetStatus::Quarantined, ev(2), 2).unwrap();
-    ledger.append(1, key(3), DetStatus::TimedOut, ev(3), 3).unwrap();
+    ledger
+        .append(1, key(2), DetStatus::Quarantined, ev(2), 2)
+        .unwrap();
+    ledger
+        .append(1, key(3), DetStatus::TimedOut, ev(3), 3)
+        .unwrap();
 
     let entries = load_and_verify(&path).unwrap();
     let statuses: Vec<DetStatus> = entries.iter().map(|e| e.det_status).collect();

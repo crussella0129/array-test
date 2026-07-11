@@ -198,8 +198,7 @@ fn given_a_non_utf8_filename_in_src_should_be_rejected() {
 #[test]
 fn given_a_symlink_in_src_should_be_rejected() {
     let unit = make_unit(&[("ok.rs", "fn f() {}")], "[io]\ninput=\"Bytes\"\n");
-    std::os::unix::fs::symlink("/etc/hostname", unit.path().join("src").join("sneaky.rs"))
-        .unwrap();
+    std::os::unix::fs::symlink("/etc/hostname", unit.path().join("src").join("sneaky.rs")).unwrap();
 
     let result = compute_code_hash(unit.path());
 

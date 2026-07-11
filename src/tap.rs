@@ -69,15 +69,11 @@ pub fn render_tap(mut points: Vec<TestPoint>, inner_succeeded: bool) -> String {
         match point.status {
             PointStatus::Ok => out.push_str(&format!("ok {n} - {}\n", point.name)),
             PointStatus::Failed => out.push_str(&format!("not ok {n} - {}\n", point.name)),
-            PointStatus::Ignored => {
-                out.push_str(&format!("ok {n} - {} # SKIP\n", point.name))
-            }
+            PointStatus::Ignored => out.push_str(&format!("ok {n} - {} # SKIP\n", point.name)),
         }
     }
     if synthesize {
-        out.push_str(&format!(
-            "not ok {total} - inner process exited nonzero\n"
-        ));
+        out.push_str(&format!("not ok {total} - inner process exited nonzero\n"));
     }
     out
 }
@@ -151,9 +147,7 @@ test result: ok. 2 passed; 0 failed; 1 ignored; finished in 0.02s
 
     #[test]
     fn given_output_differing_only_in_timing_noise_should_render_identically() {
-        let other = NOISY
-            .replace("0.53s", "1.87s")
-            .replace("0.02s", "0.41s");
+        let other = NOISY.replace("0.53s", "1.87s").replace("0.02s", "0.41s");
         assert_ne!(NOISY, other);
         assert_eq!(
             render_tap(parse_libtest(NOISY), true),

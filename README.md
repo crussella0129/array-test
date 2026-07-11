@@ -88,6 +88,15 @@ independently re-verifiable hash-chained `confirmations.ndjson`, and hash-commit
 evidence. Anyone holding the ledger file can re-verify the chain and root with zero trust
 in the runner.
 
+## Using this repo as a template
+The repo is two templates in one (D22): **the verification kernel** (frozen engine +
+founding ledger — write units, get provable regression from commit one; all instances
+speak the same v1 hash language) and **the method scaffold** (the sprint-loops records
+that were the working memory which built it). See
+[`docs/TEMPLATE.md`](docs/TEMPLATE.md) for instantiation and the **genesis ritual** —
+each instance commits its own founding ledger, and CI's rot guard then protects its
+history.
+
 ## Quickstart
 See [`examples/quickstart/`](examples/quickstart/) for a runnable two-unit workspace
 (guarded green by the test suite) demonstrating rounds, caching, the backwards arrow,
