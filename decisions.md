@@ -617,3 +617,29 @@ which the status blurb had never mentioned. A repo offered as a template must no
 past version of itself.
 **Verification:** 130 pass / 3 ignored; clippy -D warnings + fmt clean; t16_audit is the
 witness that the single-pass audit is behavior-identical.
+
+## D33 — Decompose run_cell, the function D31 deferred (s22, F3 follow-up)
+**Context:** D31 decomposed the three longest functions but deliberately left `run_cell`
+(128 lines) — the `unsafe` fork/exec + namespace sandbox — for a focused pass, since its
+privileged branches only run in the gated CI job and carry more regression risk per line.
+This is that pass.
+**Decision:** Split along the three phases the function already had, behavior-preserving:
+- **`build_cell_command`** — cleared env + hygiene set + declared vars + seed, piped stdio,
+  and (unix) the process-group + sandbox install. Returns the configured `Command`.
+- **`install_sandbox`** (unix) — the `process_group(0)` + the `pre_exec` closure (memory
+  cap, netns unshare, read-only mount, fail-closed). Now carries a proper `# Safety`
+  doc-comment spelling out the post-fork/pre-exec contract: async-signal-safe libc only,
+  heap-free captures, fail-closed — the trust-boundary documentation the s20 F17/F21 pass
+  established as doctrine, now applied to the one remaining under-documented `unsafe`.
+- **`wait_with_envelope`** — the try-wait/timeout/SIGKILL-the-group loop; returns
+  `(exit_status, timed_out)`.
+`run_cell` (128 → 55) now reads as: resolve program → build command → spawn → drain pipes →
+wait → classify → evidence.
+**Risk management:** no byte/behavior change. The `install_sandbox` branches are covered
+across *both* CI jobs — the memory-cap branch by the non-ignored `t3b` mem-cap test (the
+normal `test` job; `setrlimit` needs no privilege), the netns and mount branches by the
+`#[ignore]`-gated `t3b`/`t3c` tests in the privileged job. 130 pass / 3 ignored; clippy
+-D warnings + fmt clean.
+**Milestone:** with this, the external refactoring plan (F1–F42) is fully worked through —
+substance done, stale premises corrected in the log, maintainability-only extras
+consciously deferred where documented.
