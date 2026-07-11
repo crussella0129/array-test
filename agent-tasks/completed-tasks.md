@@ -104,6 +104,13 @@ Append-only completion log (sprint-loops convention).
   working memory). `docs/TEMPLATE.md` with the genesis ritual; CI workflow keeping the
   rot guard live on every push; fmt hygiene pass.
 
+## Sprint s13 (fuzz tier + fixtures)
+- [x] **T13 — Fuzz tier (D24).** Fixtures fill the frozen `fixtures_hash` slot (no
+  fixture files ⇒ sentinel; pre-T13 keys preserved); fuzzer-as-command with exit-65
+  findings written into `fixtures/fuzz/`; the loop closes through content addressing
+  (findings → new keys → next round tests the grown corpus); chained `fuzz.ndjson` +
+  audit; clean-result cache; `fuzz` CLI verb.
+
 ## Sprint s12 (mutation tier)
 - [x] **T12 — Frontier-scoped mutation testing (D23).** Mutator-as-command; kill = red
   round; memoized by (code_hash, mutator_hash, baseline_root) — the baseline root as

@@ -22,6 +22,9 @@ tap     Run a libtest-style command and emit deterministic, timing-free TAP on s
 mutate  Score test-suite strength: corrupt each unit via <units>/mutation.toml's
         mutator command and require the array to notice. Exit 0 iff all units are
         mutation-strong. Deliberately expensive; never runs as part of `run`.
+fuzz    Probe units via <units>/fuzz.toml's fuzzer command; findings are written into
+        each unit's fixtures/fuzz/ corpus, re-keying its cells for the next round.
+        Exit 0 iff clean.
 ";
 
 fn arg_value(args: &[String], flag: &str) -> Option<String> {
@@ -43,6 +46,7 @@ fn main() -> ExitCode {
         Some("verify") => cmd_verify(&args[1..]),
         Some("tap") => cmd_tap(&args[1..]),
         Some("mutate") => cmd_mutate(&args[1..]),
+        Some("fuzz") => cmd_fuzz(&args[1..]),
         Some("--help") | Some("-h") | Some("help") => {
             println!("{USAGE}");
             ExitCode::SUCCESS
@@ -267,6 +271,57 @@ fn cmd_mutate(args: &[String]) -> ExitCode {
             if report.all_strong {
                 ExitCode::SUCCESS
             } else {
+                ExitCode::FAILURE
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn cmd_fuzz(args: &[String]) -> ExitCode {
+    let Some(units) = arg_value(args, "--units") else {
+        return fail("fuzz requires --units <dir>");
+    };
+    let Some(state) = arg_value(args, "--state") else {
+        return fail("fuzz requires --state <dir>");
+    };
+    let seed = match arg_value(args, "--seed").map(|v| v.parse::<u64>()) {
+        None => 0,
+        Some(Ok(n)) => n,
+        Some(Err(_)) => return fail("--seed must be an integer"),
+    };
+    let units_path = PathBuf::from(&units);
+    let config = match array_test::fuzz::load_fuzz_config(&units_path) {
+        Ok(Some(config)) => config,
+        Ok(None) => return fail("fuzz requires <units>/fuzz.toml"),
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    match array_test::fuzz::run_fuzz(&units_path, &PathBuf::from(&state), seed, &config) {
+        Ok(report) => {
+            for unit in &report.units {
+                println!(
+                    "  {:<24} {}{}",
+                    unit.record.unit_id,
+                    if unit.record.findings {
+                        "FINDINGS (corpus grew; cells re-keyed)"
+                    } else {
+                        "clean"
+                    },
+                    if unit.cached { " (cached)" } else { "" }
+                );
+            }
+            if report.clean {
+                println!("FUZZ CLEAN");
+                ExitCode::SUCCESS
+            } else {
+                println!("FUZZ FINDINGS");
                 ExitCode::FAILURE
             }
         }

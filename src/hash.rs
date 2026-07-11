@@ -60,6 +60,10 @@ pub mod domain {
     pub const MUTATOR: &str = "array-test/v1/mutator";
     pub const MUTATION_ENTRY: &str = "array-test/v1/mutation-entry";
     pub const MUTATION_GENESIS: &str = "array-test/v1/mutation-genesis";
+    // Added post-freeze (s13, T13).
+    pub const FUZZER: &str = "array-test/v1/fuzzer";
+    pub const FUZZ_ENTRY: &str = "array-test/v1/fuzz-entry";
+    pub const FUZZ_GENESIS: &str = "array-test/v1/fuzz-genesis";
 }
 
 /// A blake3 digest.
@@ -287,6 +291,34 @@ impl CellScope {
             CellScope::E2e => "e2e",
         }
     }
+}
+
+/// `fixtures_hash` for a unit (T13/D24): if `<unit>/fixtures/` exists, a content hash
+/// of it (same normalized, symlink-rejecting walk as `code_hash`; root node under the
+/// FIXTURES context — the 0x00/0x01 role prefixes keep it distinct from the historical
+/// sentinel leaf). Absent dir ⇒ the sentinel, so pre-T13 workspaces keep their keys —
+/// a value-level change to a frozen key slot, no relayout (D20).
+pub fn compute_fixtures_hash(unit_dir: &Path) -> Result<Hash, CodeHashError> {
+    let fixtures_dir = unit_dir.join("fixtures");
+    if !fixtures_dir.is_dir() {
+        return Ok(Hash::leaf(domain::FIXTURES, b""));
+    }
+    let mut parts = Vec::new();
+    for file in collect_src_files(&fixtures_dir)? {
+        let contents = fs::read(&file.absolute).map_err(|source| CodeHashError::Io {
+            path: file.absolute.clone(),
+            source,
+        })?;
+        let path_hash = Hash::leaf(domain::FILE_PATH, file.normalized.as_bytes());
+        let content_hash = Hash::leaf(domain::FILE_CONTENT, &contents);
+        parts.push(Hash::node(domain::FILE_ENTRY, &[path_hash, content_hash]));
+    }
+    if parts.is_empty() {
+        // The hash covers fixture CONTENT: an empty tree is the same claim as an
+        // absent one, so merely creating a (corpus) directory is hash-neutral.
+        return Ok(Hash::leaf(domain::FIXTURES, b""));
+    }
+    Ok(Hash::node(domain::FIXTURES, &parts))
 }
 
 /// Inputs to a cell's `cell_key` (ARCHITECTURE.md §2). `scope_dep_hashes_in_dag_order`
