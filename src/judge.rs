@@ -93,8 +93,29 @@ pub enum JudgeError {
         #[source]
         source: std::io::Error,
     },
+    #[error("critique path {reference:?} escapes the state dir")]
+    UnsafePath { reference: String },
     #[error(transparent)]
     Round(#[from] RoundError),
+}
+
+/// Resolve an engine-recorded, state-relative reference (e.g. a `critique_ref`) against
+/// `state_dir`, refusing anything that could escape it (F16). The references we write are
+/// fixed-shape (`ledger/critiques/<64-hex>/N.md`) and cannot traverse, so this never
+/// rejects a value the engine produced — it is defense-in-depth for the day a judgment is
+/// loaded from disk (hence attacker-influenceable) rather than computed in-process.
+fn safe_state_path(state_dir: &Path, reference: &str) -> Result<PathBuf, JudgeError> {
+    let rel = Path::new(reference);
+    let escapes = rel.is_absolute()
+        || rel
+            .components()
+            .any(|c| !matches!(c, std::path::Component::Normal(_)));
+    if escapes {
+        return Err(JudgeError::UnsafePath {
+            reference: reference.to_string(),
+        });
+    }
+    Ok(state_dir.join(rel))
 }
 
 /// Load `<units-dir>/judge.toml` if present. Absent file = Phase J disabled.
@@ -510,6 +531,15 @@ fn write_failure_record(
     Ok(path)
 }
 
+/// Run the operator-declared repair command against a single rejected unit.
+///
+/// # Safety / trust boundary
+/// This spawns `repair.command` — an operator-authored program from `judge.toml`, at the
+/// same trust level as the test commands themselves. `unit_dir` is an engine-enumerated
+/// workspace path; `critique` has already passed [`safe_state_path`] and so is guaranteed
+/// to live under the state dir. Nothing attacker-controlled reaches the argv or the two
+/// exported env vars. The child is *not* sandboxed here (repair edits the unit in place by
+/// design); the following det round re-runs its tests under the normal sandbox.
 fn run_repair(repair: &RepairConfig, unit_dir: &Path, critique: &Path) -> Result<(), JudgeError> {
     let program = &repair.command[0];
     Command::new(program)
@@ -580,10 +610,42 @@ pub fn run_with_judgment(
         // §4.3: repair each rejected unit, scoped to that unit, driven by its critique.
         let repair = config.repair.as_ref().expect("budget > 0 implies repair");
         for cell in &rejected {
-            let critique = state_dir.join(&cell.judgment.critique_ref);
+            // F16: `critique_ref` is engine-generated (`ledger/critiques/<cell_key>/N.md`,
+            // a 64-hex path component), so it cannot traverse — but validate before
+            // joining anyway, as defense-in-depth against a future path that feeds a
+            // disk-loaded (hence attacker-influenceable) judgment here.
+            let critique = safe_state_path(state_dir, &cell.judgment.critique_ref)?;
             run_repair(repair, &dirs[&cell.unit_id], &critique)?;
         }
         attempts += 1;
         // Loop: the next det round re-keys whatever the repair touched.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn safe_state_path_accepts_engine_shaped_refs_and_rejects_traversal() {
+        let state = Path::new("/state");
+        // The shape the engine actually writes.
+        let ok = safe_state_path(state, "ledger/critiques/abcd/0.md").unwrap();
+        assert_eq!(ok, Path::new("/state/ledger/critiques/abcd/0.md"));
+
+        for bad in [
+            "../escape",
+            "a/../../etc/passwd",
+            "/etc/passwd",
+            "./x/../..",
+        ] {
+            assert!(
+                matches!(
+                    safe_state_path(state, bad),
+                    Err(JudgeError::UnsafePath { .. })
+                ),
+                "ref {bad:?} should have been refused"
+            );
+        }
     }
 }

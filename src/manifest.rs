@@ -74,9 +74,7 @@ impl Manifest {
     /// load time keeps errors close to their cause — a self-dependency surfacing later
     /// as a DAG cycle error names the symptom, not the mistake.
     fn validate(&self) -> Result<(), String> {
-        if self.id.trim().is_empty() {
-            return Err("id must be non-empty".to_string());
-        }
+        validate_unit_id(&self.id)?;
         let mut seen = std::collections::BTreeSet::new();
         for dep in &self.deps {
             if dep == &self.id {
@@ -118,6 +116,32 @@ impl Manifest {
         }
         Ok(())
     }
+}
+
+/// Validate a unit `id` at parse time (F18). The `id` is user-authored and reaches path
+/// construction (e.g. mutation work dirs at `mutation.rs`), so reject anything that could
+/// traverse or confuse a filesystem — defense-in-depth applied at the source, not the
+/// use site. Allowed: non-empty, no path separators, no `..`, no leading dot, no control
+/// characters or whitespace. (Dotted namespacing like `u.parser.tokenize` is fine.)
+fn validate_unit_id(id: &str) -> Result<(), String> {
+    if id.is_empty() {
+        return Err("id must be non-empty".to_string());
+    }
+    if id.contains('/') || id.contains('\\') {
+        return Err(format!("id '{id}' must not contain a path separator"));
+    }
+    if id.contains("..") {
+        return Err(format!("id '{id}' must not contain '..'"));
+    }
+    if id.starts_with('.') {
+        return Err(format!("id '{id}' must not start with '.'"));
+    }
+    if id.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err(format!(
+            "id '{id}' must not contain control characters or whitespace"
+        ));
+    }
+    Ok(())
 }
 
 pub fn load_manifest(path: &Path) -> Result<Manifest, ManifestError> {

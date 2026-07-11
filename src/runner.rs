@@ -96,8 +96,16 @@ mod fs_ro {
     pub const MOUNT_ATTR_RDONLY: u64 = 0x1;
     pub const AT_RECURSIVE: libc::c_int = 0x8000;
 
-    /// Make the current mount namespace fully read-only. Caller must already be in a
-    /// fresh, private namespace. Fail-closed.
+    /// Make the current mount namespace fully read-only. Fail-closed.
+    ///
+    /// # Safety
+    /// The caller must already have unshared into a fresh, private mount namespace (via
+    /// `CLONE_NEWNS`, as the child sandbox does before invoking this) and must not intend
+    /// to write to any mount afterwards. This recursively flips `/` to read-only for the
+    /// *current* namespace; running it in a shared namespace would either fail (the
+    /// `MS_PRIVATE` reparent is best-effort) or, worse, affect mounts visible elsewhere.
+    /// It is `unsafe` because that namespace precondition is not checkable here — it is a
+    /// contract the sandbox setup upholds, not something the type system can enforce.
     pub unsafe fn make_root_readonly() -> Result<(), std::io::Error> {
         // Disconnect propagation so the read-only flip cannot leak to the host.
         if libc::mount(
