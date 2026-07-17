@@ -138,6 +138,11 @@ Three channels, all first-class (D11):
 - Test authoring and evidence format follow
   [riteway](https://github.com/crussella0129/riteway)'s `given/should/actual/expected` +
   TAP conventions.
+- **Rollback is free.** The ledger is append-only *history*, but the array root is a pure
+  function of the current tree content — so a `git checkout`/`revert`/branch-switch that
+  moves the tree backwards reproduces the earlier root (from cache if the state survived,
+  by deterministic re-execution if not). The state never lags version control
+  (`docs/ARCHITECTURE.md` §7.1; guarded by `tests/t17_rollback.rs`).
 
 ## Embedding
 array-test is **library-first and consumer-agnostic** (D11). It is being built to power
