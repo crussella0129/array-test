@@ -14,6 +14,7 @@ USAGE:
   array-test verify --state <dir>
   array-test tap -- <command> [args...]
   array-test mutate --units <dir> --state <dir> [--seed N]
+  array-test --version | -V
 
 run     Execute one regression round. Exit 0 iff the round is green (all cells Pass).
 verify  Re-verify the ledger chain and the latest round's root. Exit 0 iff intact.
@@ -49,6 +50,11 @@ fn main() -> ExitCode {
         Some("fuzz") => cmd_fuzz(&args[1..]),
         Some("--help" | "-h" | "help") => {
             println!("{USAGE}");
+            ExitCode::SUCCESS
+        }
+        Some("--version" | "-V" | "version") => {
+            // Single-sourced from Cargo.toml so the flag can never drift from the crate.
+            println!("array-test {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
         _ => fail(&format!(

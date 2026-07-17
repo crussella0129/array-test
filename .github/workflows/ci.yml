@@ -34,3 +34,35 @@ jobs:
       - run: apt-get update && apt-get install -y python3-pip cbmc
       - run: pip install --break-system-packages hypothesis || pip install hypothesis
       - run: cargo test -- --ignored
+
+  # C1–C3 (D36): build the container image and prove the SHIPPED artifact works — the
+  # binary runs, the proved tier's CBMC and the property tier's Hypothesis are provisioned,
+  # and under --privileged the sandbox is live (net_isolated recorded in the ledger).
+  # Green rounds alone would be theater for the sandbox claim; the ledger grep is the
+  # witness that isolation actually applied inside this image.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t array-test:ci .
+      - name: Version and help smoke
+        run: |
+          docker run --rm array-test:ci --version
+          docker run --rm array-test:ci help >/dev/null
+      - name: Unprivileged round over the quickstart workspace
+        run: docker run --rm array-test:ci run --units /opt/array-test/examples/quickstart/units --state /tmp/state
+      - name: Proved tier — CBMC discharges the committed proof inside the image
+        run: docker run --rm array-test:ci run --units /opt/array-test/examples/proved-cbmc/units --state /tmp/state
+      - name: Property tooling present (Hypothesis)
+        run: docker run --rm --entrypoint python3 array-test:ci -c "import hypothesis; print('hypothesis', hypothesis.__version__)"
+      - name: Privileged — the sandbox is live (net_isolated recorded per confirmation)
+        run: |
+          docker run --rm --privileged --entrypoint /bin/sh array-test:ci -ec '
+            array-test run --units /opt/array-test/examples/quickstart/units --state /tmp/s
+            grep -q "net_isolated" /tmp/s/ledger/confirmations.ndjson
+            echo "sandbox live: net_isolated recorded"'
+      - name: sprint-loops Test-phase shim works in the image
+        run: |
+          docker run --rm --entrypoint /bin/sh array-test:ci -ec '
+            cp -r /opt/array-test/examples/quickstart/units /w
+            array-test-phase --units /w --state /tmp/phase-state'

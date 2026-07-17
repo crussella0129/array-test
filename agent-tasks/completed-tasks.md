@@ -129,3 +129,27 @@ Append-only completion log (sprint-loops convention).
   both transcripts; ledger-derived round numbers; `Ledger::record` struct API;
   judgments open-once; `manifest.sprint` optional; cosmetics; §7.4 trust model; audit
   notes certificate-less rounds.
+
+## Sprint s14 (read-only FS + contracts)
+- [x] **T3c — Filesystem read scoping.** Env-gated recursively read-only mount via
+  mount_setattr (D25); fail-closed. Completes R-g isolation. (#[ignore] + privileged CI.)
+- [x] **T7b — Contract-checker example.** A committed unit that enforces contract.toml.
+
+## Sprints s15–s22 (refactoring pass, external review D26; F1–F42)
+- [x] **s15–s17** — hygiene/repr(u8)/metadata/lints (D26); #[ignore]+privileged CI honesty
+  (F11, D27); O(N^2) sidecar appends fixed via open-once writers (F1, D28); cache helper
+  (F6); typed errors (F4).
+- [x] **s20/s18/s19/s21/s22** — security: id validation + containment + trust docs (D29);
+  typed manifest scope keys (F2, D30); decomposed the four longest functions (F3, D31/D33);
+  single-pass evidence audit + README currency (D32).
+
+## Sprint s23 (T8b — proved tier live)
+- [x] **T8b — Live proof tier.** CBMC (Kani's engine) discharges an all-inputs proof over a
+  committed `examples/proved-cbmc/` unit; guarantee=proved recorded; falsification test;
+  runs live in the privileged CI job (D34). Kani Rust path deferred (its bundle host is
+  outside session GitHub scope).
+
+## Sprint s24 (T14 — sprint-loops adapter)
+- [x] **T14 — sprint-loops Test-phase adapter.** `adapters/sprint-loops/array-test-phase.sh`
+  + README; gates a sprint on a green, re-verified root; per-sprint test-record.md; core
+  stays agnostic (D11/D35). array-test-fork creation blocked by session GitHub scope.

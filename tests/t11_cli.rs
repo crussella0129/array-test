@@ -28,6 +28,20 @@ fn write_unit(units_dir: &Path, id: &str, script: &str) {
 }
 
 #[test]
+fn given_the_version_flag_should_print_the_crate_version_and_exit_zero() {
+    for flag in ["--version", "-V", "version"] {
+        let output = bin().arg(flag).output().unwrap();
+        assert!(output.status.success(), "{flag} must exit 0");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(
+            stdout.trim(),
+            format!("array-test {}", env!("CARGO_PKG_VERSION")),
+            "{flag} output"
+        );
+    }
+}
+
+#[test]
 fn given_a_green_workspace_run_should_exit_zero_and_write_the_certificate() {
     let ws = tempdir().unwrap();
     let state = tempdir().unwrap();
