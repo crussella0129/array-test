@@ -66,3 +66,38 @@ jobs:
           docker run --rm --entrypoint /bin/sh array-test:ci -ec '
             cp -r /opt/array-test/examples/quickstart/units /w
             array-test-phase --units /w --state /tmp/phase-state'
+      - name: Genesis parity (C5) — the image re-verifies the committed founding ledger
+        # Zero-toolchain independent verification of this repo's own genesis: anyone
+        # holding the image + the state dir can audit the founding history (D22).
+        run: docker run --rm -v "$PWD/selfhost/state:/state:ro" array-test:ci verify --state /state
+
+  # C4 (D37): publish the image to GHCR — by digest, the only pin that matters. Runs only
+  # on a push to main whose test, privileged, and image-proof jobs are all green. The
+  # digest is emitted to the job summary; consumers pin `@sha256:…`, never a mutable tag.
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, privileged-tests, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t array-test:publish .
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Tag and push (crate version + commit)
+        run: |
+          IMAGE=ghcr.io/${{ github.repository }}
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          docker tag array-test:publish "$IMAGE:$VERSION"
+          docker tag array-test:publish "$IMAGE:sha-${GITHUB_SHA::7}"
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:sha-${GITHUB_SHA::7}"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE:$VERSION")
+          echo "## Image published" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pin by digest (never a tag):" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "docker pull $DIGEST" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "published: $DIGEST"

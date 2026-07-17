@@ -110,9 +110,23 @@ docker run --rm --privileged array-test:ci run --units <units> --state <state>
 
 Note the *image* is immutable (content-addressed layers); the running *container* is not —
 add `--read-only` (with a writable `--tmpfs` for the state dir) if you want an immutable
-runtime filesystem too. The image is one distribution channel among several (D11): the
-binary (`cargo install --path .`) and the library API remain first-class. Registry
-publication by digest is the remaining step (backlog C4).
+runtime filesystem too.
+
+## Distribution
+Three channels, all first-class (D11):
+
+1. **Container image** — published to GHCR by the `publish` CI job on every green push to
+   `main`, tagged with the crate version and commit. **Consume it by digest** — the exact
+   `docker pull ghcr.io/crussella0129/array-test@sha256:…` line is printed in each publish
+   run's job summary. A digest pins the entire evidence-producing environment (binary +
+   CBMC + Hypothesis + libc), the runner-side counterpart of `toolchain_hash`. The image
+   also independently re-verifies any founding ledger with zero toolchain
+   (`… verify --state /state`) — the `docker` CI job does exactly that against this repo's
+   own genesis on every push, and `docs/TEMPLATE.md` documents the full container-path
+   genesis ritual for template instances.
+2. **Binary** — `cargo install --path .` from a clone (Rust ≥ 1.77). Not yet on crates.io.
+3. **Library** — the `array_test` crate API (`run_round`, `full_audit`, ledgers, hashing);
+   the CLI and the sprint-loops shim are both thin consumers of it.
 
 ## Notable design points
 - Regression is a **Merkle DAG of confirmations**: content-addressed cells, frontier-only

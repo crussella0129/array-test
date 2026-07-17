@@ -8,39 +8,90 @@ property tier (T7); TAP as the language-agnostic evidence contract (T6) — rite
 optional adapter for JS units, not a dependency of the core.
 
 **Status:** refactoring plan (F1–F42, s15–s22), T8b (s23), T14 (s24), and containerization
-C1–C3 + `--version` (s25) complete. Remaining below: C4/C5, the environmental blockers,
-cross-platform, and the authoring tutorial.
+C1–C5 (s25/s26) complete. Remaining: the Kani Rust proof path (see the handoff at the
+bottom), the authoring tutorial, and the cross-platform decision.
 
-## Containerization (C1–C3 landed s25/D36)
-- [x] **C1 — Multi-stage `Dockerfile`.** rust:1-slim-trixie builder → debian:trixie-slim
-  runtime with binary + cbmc + python3-hypothesis + the T14 shim + example workspaces.
-- [x] **C2 — Two documented run modes.** README "Container image": plain = EnvOnly;
-  `--privileged`/`--cap-add=SYS_ADMIN` = full sandbox; `--read-only` note for runtime
-  immutability.
-- [x] **C3 — A `docker` CI job.** Builds the image and proves the shipped artifact:
-  quickstart + proved-CBMC rounds green inside it, Hypothesis importable, T14 shim works,
-  and under `--privileged` the ledger records `net_isolated` (the non-theater witness).
-- [ ] **C4 — Publish by digest.** Push to a registry (e.g. GHCR via a `packages: write`
-  workflow on main) and document `docker run …@sha256:…`; extend the README "Container
-  image" section into a full "Distribution" section (image / `cargo install` / library).
-- [ ] **C5 (stretch) — Genesis-ritual parity.** Ensure the image path honors the template
-  genesis ritual (D22) — a fresh instance can still commit its own founding ledger and let
-  the rot guard protect it.
+## Containerization (complete: C1–C3 s25/D36, C4–C5 s26/D37)
+- [x] **C1 — Multi-stage `Dockerfile`** (s25).
+- [x] **C2 — Two documented run modes** (s25).
+- [x] **C3 — `docker` CI job proving the shipped image** (s25).
+- [x] **C4 — Publish by digest** (s26): `publish` CI job pushes to GHCR on green main
+  pushes (crate-version + commit tags); the digest — the only pin that matters — lands in
+  the job summary. README gained a "Distribution" section (image / binary / library).
+  NOTE: first publish creates the GHCR package **private** by default; flip it to public
+  in Settings → Packages if that's the intent (human step).
+- [x] **C5 — Genesis-ritual parity** (s26): TEMPLATE.md documents the container-path
+  ritual (builder image runs it — the selfhost cells need `cargo`; `--user` note for file
+  ownership), and the `docker` CI job now has the runtime image independently re-verify
+  this repo's committed founding ledger on every push (zero-toolchain audit, D22).
 
-## Deferred / blocked (not software defects)
-- [ ] **Kani (Rust proof path).** Add a native `#[kani::proof]` harness alongside the CBMC
-  one. Blocked: `model-checking/kani`'s release bundle is outside this session's GitHub
-  egress scope (D34). Needs a session/host authorized to reach it.
-- [ ] **`array-test-fork`.** Create the sprint-loops-side fork and drop in
-  `adapters/sprint-loops/`. Blocked: `create_repository`/`fork_repository` return 403 under
-  this session's `array-test`-only scope (D35). Needs the user or a broader-scoped session.
-- [ ] **Cross-platform proof.** 16/20 test files are `#![cfg(unix)]`; macOS runs degraded
-  (EnvOnly), Windows is untested. Decide whether non-Linux is in scope; if so, prove it.
-  (The container image is the sanctioned "run it anywhere" answer meanwhile.)
-
-## Polish (in-scope, quick)
-- [x] **`--version` / `-V` flag.** Landed s25: prints `array-test <crate version>`, exit 0;
-  covered in t11_cli.
+## Remaining
 - [ ] **"Author your first unit" tutorial.** The schema is in ARCHITECTURE §1.1 and shown
   by `examples/`, but there's no dedicated walkthrough (manifest/contract/tests) for a
   newcomer.
+- [ ] **Cross-platform proof.** 16/20 test files are `#![cfg(unix)]`; macOS runs degraded
+  (EnvOnly), Windows is untested. Decide whether non-Linux is in scope; if so, prove it.
+  (The container image is the sanctioned "run it anywhere" answer meanwhile.)
+- [ ] **`array-test-fork` / sprint-loops wiring** — **user-owned** (being handled without
+  AI): create the fork, drop in `adapters/sprint-loops/`. No agent action.
+- [ ] **Kani (Rust proof path)** — see the HANDOFF plan below; blocked on egress scope in
+  the sessions to date.
+
+---
+
+## HANDOFF — Kani provisioning plan. Read, execute (or re-file), then DELETE this section
+
+**Delete this entire section once analyzed** — fold anything you aren't executing into the
+"Remaining" list above as ordinary items. It is a transient note, not durable backlog.
+
+**Goal.** Add a *native Rust* proof path to the `proved` tier: a committed
+`#[kani::proof]` harness discharged by Kani, alongside (not replacing) the CBMC example.
+The tier is prover-agnostic by design (D34) — this is an addition, not a migration.
+
+**Why it hasn't happened.** Every session so far had GitHub egress scoped to
+`crussella0129/array-test` only. `cargo kani setup` downloads its release bundle from the
+`model-checking/kani` repo → 403. Verified, not assumed (D34 records the probes). Do NOT
+route around the scope; run this in a session/host authorized for that repo — or use the
+offline-bundle path in step 2.
+
+**Plan (est. one sprint, purely additive — no frozen surface is touched):**
+1. **Provision the driver:** `cargo install --locked kani-verifier` (crates.io — this part
+   worked even in the scoped session).
+2. **Provision the toolchain, one of:**
+   a. Authorized host: `cargo kani setup` (downloads bundle + pinned nightly + CBMC).
+   b. Offline: on any machine, fetch
+      `kani-<ver>-x86_64-unknown-linux-gnu.tar.gz` from the Kani releases page, transfer
+      it in, then `cargo kani setup --use-local-bundle <path>`.
+   Sanity-check with `cargo kani --version` and a one-line proof crate.
+3. **Build `examples/proved-kani/units/nibble-roundtrip-rs/`** mirroring
+   `examples/proved-cbmc/` — same invariant (hex-nibble round-trip + hex-digit validity)
+   so the two provers are comparable. A tiny cargo crate under `src/`, a
+   `#[kani::proof]` harness with `kani::any::<u8>()`, a `run-proof.sh` wrapper, manifest
+   with `guarantee = "proved"`.
+   **Landmines the CBMC sprint already mapped — do not rediscover them:**
+   - **`CARGO_TARGET_DIR` MUST point outside the unit dir** (e.g. a tmpdir). `code_hash`
+     walks `src/**`; if cargo writes `target/` inside it, every run re-keys the cell —
+     an infinite-re-key bug that will look like "caching is broken".
+   - **Cells run with a cleared env** (D12). `cargo kani` needs `PATH` (with
+     `~/.cargo/bin`), `HOME` (it reads `~/.kani`), and possibly
+     `CARGO_HOME`/`RUSTUP_HOME` — declare them all in `[tests.unit.env]`.
+   - **Determinism meta-check:** kani output carries timing/paths. The wrapper must
+     discard raw output and emit fixed TAP lines only (the `run-proof.sh` pattern),
+     or the run-twice check quarantines the cell.
+   - Give the cell a generous `timeout_secs` (kani compiles before proving; 300+).
+4. **Tests — `tests/t8c_proved_kani.rs`,** mirroring `t8b_proved.rs` exactly:
+   one non-ignored plumbing check if anything engine-visible is new (likely nothing),
+   plus `#[ignore = "requires kani; run via --ignored"]` + self-skip (D27) for: (a) the
+   real proof passes and records `Guarantee::Proved`; (b) a falsified harness (assert
+   something refutable) turns the round red — the proof must prove something.
+5. **CI:** extend `privileged-tests` (or a new `kani` job): install driver + `cargo kani
+   setup`, **cache `~/.kani` and the kani-verifier binary** (`actions/cache`; the setup
+   download is ~hundreds of MB and slow), run `cargo test -- --ignored`. Confirm in the
+   job logs that the kani tests *executed*, not skipped (the s23 log-check precedent).
+6. **Records:** decision D38+ (adoption + any premise corrections), `sprints/s27+/`
+   research/plans/meta, backlog + README status updates. Optionally note a future
+   "proof image" variant (builder stage + kani) under containerization.
+
+**Definition of done:** kani tests pass live in CI (log-verified, not just green),
+falsification case red, suite otherwise unchanged, zero frozen surfaces touched,
+records written. The sprint-loops fork is NOT part of this — the user is handling it.

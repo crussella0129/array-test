@@ -732,3 +732,33 @@ the *tested* toolchain — content addressing extended to the evidence-producing
 **Verification:** local — 135 pass / 5 ignored, clippy -D warnings + fmt clean. The
 Dockerfile and docker job cannot run in this session (no docker daemon); the PR's `docker`
 CI job is the verifier, per the established CI-green-before-merge rule.
+
+## D37 — Publish by digest; genesis parity split along the toolchain line (s26, C4/C5)
+**Context:** C4 (registry publication) and C5 (genesis-ritual parity for the image path)
+were the remaining containerization items after s25.
+**C4 decision:** a `publish` CI job on green pushes to `main` only (`needs: [test,
+privileged-tests, docker]` — the image is never published un-proven), pushing to GHCR via
+the workflow's own `GITHUB_TOKEN` (`packages: write`), tagged with the crate version and
+the commit. Tags are convenience; **the digest is the contract** — it is printed in the
+job summary as a ready `docker pull …@sha256:…` line, and the README "Distribution"
+section (image / binary / library, all first-class per D11) says to consume only that.
+Known human step recorded: the first push creates the GHCR package *private*; flipping it
+public is a Settings action the token cannot do.
+**C5 decision:** genesis parity splits honestly along the toolchain line. The selfhost
+cells drive the freshly built binary via a relative `target/debug` PATH, so genesis
+*creation* requires `cargo` — which the runtime image deliberately lacks. Parity is
+therefore: (a) TEMPLATE.md documents running the ritual in the **builder** image
+(`rust:1-slim-trixie`, the same pinned environment the published binary is compiled in,
+with `--user`/`CARGO_HOME` notes for mounted-file ownership); (b) the **runtime** image
+re-verifies any founding ledger with zero toolchain — and the `docker` CI job now does
+exactly that against this repo's own committed genesis on every push (`verify --state`
+over a read-only mount of `selfhost/state`). Claiming the runtime image could *run* the
+ritual would have been false; recording the split is the honest form of parity (D14).
+**Also this sprint:** the `array-test-fork` backlog item is marked user-owned (being
+handled without AI, per the user), and a detailed, delete-after-reading Kani provisioning
+handoff (bundle paths, the `CARGO_TARGET_DIR` re-key landmine, cleared-env declarations,
+determinism wrapper, CI caching, definition-of-done) is parked at the bottom of
+`agent-tasks.md` for a future session with authorized egress.
+**Verification:** no Rust changes — suite/clippy/fmt unchanged locally; the new `docker`
+verify step and the `publish` job are CI-verified (publish fires on the merge commit to
+main; watched there, since PR runs cannot exercise a main-only job).
