@@ -48,6 +48,28 @@ It is **not** a formal proof of correctness; the proved tier (T8b) remains futur
    git add selfhost/state && git commit -m "genesis: founding ledger"
    ```
    The rot-guard test (`tests/t15b_durable.rs`) now guards *your* history.
+
+   **Container path (no host toolchain, C5/D37).** The ritual needs `rustc`/`cargo`
+   (the selfhost cells drive the freshly built binary via a relative
+   `target/debug` PATH), which the runtime image deliberately does not carry. Run
+   the ritual in the *builder* image instead — the same pinned environment the
+   published binary is compiled in — with your clone mounted:
+   ```sh
+   docker run --rm --user "$(id -u):$(id -g)" -e CARGO_HOME=/w/.cargo-docker \
+     -v "$PWD:/w" -w /w rust:1-slim-trixie sh -ec '
+       rm -rf selfhost/state
+       rustc -vV > selfhost/units/toolchain.lock
+       cargo build
+       target/debug/array-test run --units selfhost/units --state selfhost/state
+       target/debug/array-test run --units selfhost/units --state selfhost/state
+       target/debug/array-test verify --state selfhost/state'
+   git add selfhost/state && git commit -m "genesis: founding ledger"
+   ```
+   (`--user` keeps the written state owned by you; drop `.cargo-docker/` afterwards
+   or add it to `.gitignore`.) The *runtime* image then re-verifies any founding
+   ledger with zero toolchain — `docker run --rm -v "$PWD/selfhost/state:/state:ro"
+   <image> verify --state /state` — which is exactly what the `docker` CI job does
+   against this repo's own genesis on every push.
 4. **Start your first sprint (Layer B).** Reset `decisions.md` to D1, open
    `sprints/s0/` with a research phase, and let `agent-tasks/` carry the backlog.
 5. **Write real units.** Start from `examples/quickstart/`; add a `judge.toml` when
