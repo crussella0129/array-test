@@ -313,6 +313,25 @@ The regression array's **Merkle root** commits to the multiset of `{cell_key →
 
 This is the "in real time / history" record from the drawing, made tamper-evident.
 
+#### Append-only ledger, content-addressed HEAD (rollback is free)
+The ledger only grows — you never rewrite history — but that does **not** make the state
+lag version control. The array **root is a pure function of the current tree content**
+(§2: keys derive from `code_hash`es, never from a round number, timestamp, or sequence),
+so the *latest* root always reflects exactly the tree you have. When a project's tree moves
+**backwards** — `git checkout` an older commit, `git revert`, switch branches — the files
+return to earlier bytes, the old `cell_key`s reappear, and the next run reproduces the
+earlier root:
+
+- **warm** (the state dir survived the checkout): served entirely from cache, zero
+  re-execution;
+- **cold** (the state dir did not): reproduced by deterministic re-execution — rollback
+  never *depends* on the cache, only accelerates with it.
+
+So history is immutable (good for provenance) while HEAD tracks the working tree in both
+directions. A new round *is* appended for the reverted state — the ledger honestly shows
+`root_A, root_B, root_A` — but the current certificate is `root_A` again. Guarded by
+`tests/t17_rollback.rs`.
+
 ### 7.2 Universal correctness (stronger than examples — still Phase D)
 - **Contracts** (pre/post/invariants) are checked on every cell that exercises a unit.
 - **Property-based tests** assert `∀ x ∈ domain. P(x)` via generation + shrinking — a

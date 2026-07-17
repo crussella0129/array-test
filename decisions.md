@@ -762,3 +762,25 @@ determinism wrapper, CI caching, definition-of-done) is parked at the bottom of
 **Verification:** no Rust changes — suite/clippy/fmt unchanged locally; the new `docker`
 verify step and the `publish` job are CI-verified (publish fires on the merge commit to
 main; watched there, since PR runs cannot exercise a main-only job).
+
+## D38 — Rollback soundness: guard the property that HEAD tracks the tree, not the ledger length (s27)
+**Context:** A fair challenge — a content-addressed *state* that only ever appends could
+look useless beside git: if it's append-only and version control is not, does reverting the
+tree leave stale state? Audited empirically before assuming.
+**Finding (it already holds, by construction):** the array root is a pure function of the
+current tree content — `cell_key`s derive from `code_hash`es (§2), and `array_root` folds
+`{cell_key → det_status}` with **no round number, timestamp, or sequence** in it. So moving
+the tree backwards (git checkout/revert/branch switch = files returning to earlier bytes)
+reproduces the earlier root: verified `root_A → root_B → root_A` byte-identical, warm
+(cache, 0 re-exec) and cold (fresh state dir, deterministic re-exec — rollback never
+*depends* on the cache). The ledger stays append-only (correct — provenance is immutable);
+only HEAD moves.
+**Decision:** the property was sound but **unguarded** — folding a round number or timestamp
+into a cache key or the root would silently break it and no test would notice. Added
+`tests/t17_rollback.rs`: (1) change→revert returns the exact earlier root with 0 executed /
+all reused, and the ledger still audits clean with every round retained; (2) a *cold* state
+dir over the reverted tree still reproduces the root by re-execution. Documented the
+guarantee in ARCHITECTURE §7.1 ("append-only ledger, content-addressed HEAD") and a README
+design point. No engine change — this is a latent guarantee made explicit and load-bearing.
+**Verification:** 137 pass / 5 ignored; clippy -D warnings + fmt clean; frozen surfaces
+untouched (the test only observes existing behavior).
