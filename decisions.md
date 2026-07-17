@@ -701,3 +701,34 @@ else return `403 Resource not accessible by integration` (the same scope wall th
 the Kani bundle in D34). So the adapter is delivered in-scope, self-contained, and designed
 to be copied straight into that fork — the fork's creation is the user's to do (or a
 session with broader GitHub scope). Not circumvented.
+
+## D36 — Containerize the evidence-producing environment; prove the shipped image, not the build (s25, C1–C3)
+**Context:** The usability assessment found array-test is Linux-first (the netns /
+`mount_setattr` / `RLIMIT_AS` sandbox) and its strongest tiers need provisioned tools
+(CBMC, Hypothesis). The user's containerization instinct fits the project's own doctrine:
+an image pins the *runner's* environment the way `toolchain.lock` → `toolchain_hash` pins
+the *tested* toolchain — content addressing extended to the evidence-producing runtime.
+**Decision:**
+- **C1:** a multi-stage `Dockerfile` — `rust:1-slim-trixie` builder → `debian:trixie-slim`
+  runtime carrying only the release binary + `cbmc` + `python3-hypothesis` + the T14 shim +
+  the committed example workspaces. Same Debian release in both stages (glibc match); no
+  Rust toolchain ships. `proved`/`property` are live by default in the image.
+- **C2:** two documented run modes (README "Container image"): plain run = EnvOnly,
+  `--privileged`/`--cap-add=SYS_ADMIN` = full sandbox — the isolation level is recorded
+  honestly per confirmation either way. Framing correction recorded: the *image* is
+  immutable; the running *container* is not without `--read-only` — what the image buys is
+  reproducibility of the environment, not runtime tamper-proofing.
+- **C3:** a `docker` CI job that proves the **shipped artifact**, not the build: quickstart
+  and proved-CBMC rounds green *inside* the image, `import hypothesis` succeeds, the T14
+  shim runs, and — the non-theater witness — under `--privileged` the ledger records
+  `net_isolated`, so the sandbox demonstrably applied inside this image. (Green rounds
+  alone could not distinguish EnvOnly from sandboxed; the ledger grep can, because D16
+  records the level per confirmation. The honesty doctrine made this assertion possible.)
+- **Positioning (per D11):** one distribution channel among several — binary,
+  `cargo install`, and the library API stay first-class. C4 (registry publication by
+  digest) and C5 (genesis-ritual parity) remain on the backlog.
+- **Polish folded in:** `--version`/`-V`/`version` (was: exit-2 error), single-sourced from
+  `CARGO_PKG_VERSION`, covered in t11_cli; it doubles as the image's smoke command.
+**Verification:** local — 135 pass / 5 ignored, clippy -D warnings + fmt clean. The
+Dockerfile and docker job cannot run in this session (no docker daemon); the PR's `docker`
+CI job is the verifier, per the established CI-green-before-merge rule.

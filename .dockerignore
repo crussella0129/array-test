@@ -1,0 +1,10 @@
+target/
+.git/
+selfhost/
+sprints/
+agent-tasks/
+docs/
+tests/
+.github/
+*.md
+!examples/**/*.md

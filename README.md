@@ -88,6 +88,32 @@ array-test verify --state <state-dir>
 array-test tap -- <command> [args...]
 ```
 
+## Container image
+A multi-stage [`Dockerfile`](Dockerfile) packages the release binary with the tools the
+guarantee tiers need — CBMC (the `proved` tier) and Hypothesis (the `property` tier) — so
+both are **live by default** instead of "provision it yourself". The image pins the
+*evidence-producing environment* the way the engine pins the tested toolchain
+(`toolchain.lock` → `toolchain_hash`): consume it **by digest** (`@sha256:…`), never by a
+mutable tag. The `docker` CI job builds the image and proves it — quickstart and
+proved-CBMC rounds green inside it, Hypothesis importable, and the sandbox live under
+privilege (the ledger records `net_isolated`).
+
+Two run modes (the isolation level is recorded honestly per confirmation either way):
+
+```sh
+# EnvOnly isolation: env hygiene + the determinism meta-check, no namespaces.
+docker run --rm array-test:ci run --units /opt/array-test/examples/quickstart/units --state /tmp/s
+
+# Full sandbox: per-cell network namespaces + read-only mounts need CAP_SYS_ADMIN.
+docker run --rm --privileged array-test:ci run --units <units> --state <state>
+```
+
+Note the *image* is immutable (content-addressed layers); the running *container* is not —
+add `--read-only` (with a writable `--tmpfs` for the state dir) if you want an immutable
+runtime filesystem too. The image is one distribution channel among several (D11): the
+binary (`cargo install --path .`) and the library API remain first-class. Registry
+publication by digest is the remaining step (backlog C4).
+
 ## Notable design points
 - Regression is a **Merkle DAG of confirmations**: content-addressed cells, frontier-only
   re-runs, a hash-chained ledger with a verifiable green root (`docs/ARCHITECTURE.md`).
