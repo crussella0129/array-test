@@ -23,8 +23,12 @@ COPY src ./src
 RUN cargo build --release --locked
 
 FROM debian:trixie-slim
+# gcc + libc6-dev are NOT optional alongside cbmc: it shells out to the system C
+# preprocessor (`gcc -E`) and needs the libc headers to preprocess harnesses — with
+# `--no-install-recommends` they must be named explicitly or every proof fails at
+# preprocessing (found live by the docker CI job's proved-tier round).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends cbmc python3 python3-hypothesis \
+    && apt-get install -y --no-install-recommends cbmc gcc libc6-dev python3 python3-hypothesis \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /src/target/release/array-test /usr/local/bin/array-test
 # The sprint-loops Test-phase shim (T14) and the committed example workspaces, so the
