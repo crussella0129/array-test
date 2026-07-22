@@ -7,9 +7,54 @@ Persistent across sprints (sprint-loops convention). Ordered by build dependency
 property tier (T7); TAP as the language-agnostic evidence contract (T6) — riteway is an
 optional adapter for JS units, not a dependency of the core.
 
-**Status:** refactoring plan (F1–F42, s15–s22), T8b (s23), T14 (s24), and containerization
-C1–C5 (s25/s26) complete. Remaining: the Kani Rust proof path (see the handoff at the
-bottom), the authoring tutorial, and the cross-platform decision.
+**Status:** refactoring plan (F1–F42, s15–s22), T8b (s23), T14 (s24), containerization
+C1–C5 (s25/s26), and the rollback-soundness guard (s27/D38) complete. A full codebase
+review (post-s27) filed the P0–P2 items below; the Kani handoff at the bottom still awaits
+an authorized session.
+
+## P0 — state integrity under adversity (one sprint; fix before calling it production-grade)
+Findings from the post-s27 review, **verified live**, not speculative.
+- [ ] **R1 — Concurrent-run lock.** Two simultaneous `run`s on one state dir corrupt it —
+  reproduced: raced ledger appends → `verification FAILED: root certificate R1 has no
+  ledger entries`. Detection works (verify exits 1); prevention doesn't exist. Fix: an
+  exclusive advisory lock (`flock`) on `<state>/lock` held for `run`/`mutate`/`fuzz`;
+  a second process fails fast with a clear message. Small; no frozen surfaces.
+- [ ] **R2 — Crash durability (`fsync`).** `chained::append_ndjson_line` never syncs: an
+  OS crash/power loss can lose acknowledged confirmations or tear the last ledger line —
+  and a torn tail fails chain-verify with **no recovery path** (state bricked short of
+  hand-editing). Fix: `sync_all` on ledger/sidecar appends (or minimally at round close +
+  root write) **plus** an explicit `array-test repair --truncate-torn-tail` that recovers
+  to the valid prefix *loudly* (honest recovery, never silent tolerance — D14).
+
+## P1 — robustness & scale (one sprint each)
+- [ ] **R3 — Evidence memory cap.** Both pipe-drain threads `read_to_end` into RAM; a
+  runaway cell emitting GBs OOMs the runner (`runner.rs:382/387`). Fix: cap captured
+  evidence (`evidence_limit_mb`, generous default) with an explicit truncation marker in
+  the evidence bytes. Value-level, no relayout; determinism holds — both meta-check runs
+  truncate identically.
+- [ ] **R4 — Parallel cells within a tier (`--jobs N`).** Cells are hermetic and the code
+  already says so (`round.rs:504`: "cells within a tier are semantically parallel") but
+  execution is serial. Within-tier parallel execution is a large, low-risk speedup; tier
+  gating stays sequential; ledger appends serialize behind the loop as today.
+- [ ] **R5 — GC / growth policy.** `cache/`, `evidence/`, `critiques/` grow forever with
+  no policy (the ledger grows by design — that part is correct). Fix: an `array-test gc`
+  verb pruning cache entries + evidence unreferenced by the last N roots — evidence
+  pruning is already audit-*legal* (missing evidence is a note, not a violation). At
+  minimum, document the growth contract.
+
+## P2 — polish
+- [ ] **R6 — Contract honesty in docs.** `contract.toml` `[invariants]`/`[properties]` are
+  schema-validated but engine-unenforced (by design — D17, Phase-J-audited declarations;
+  the s14 example shows a unit self-enforcing). A newcomer will assume engine enforcement:
+  make ARCHITECTURE §1.2 say "judge-facing declarations" in its first sentence, or promote
+  a real contract-check tier.
+- [ ] **R7 — Non-root container user.** No `USER` in the Dockerfile; the default path
+  should run unprivileged (the sandbox mode can still be root). One line + a docs touch.
+
+**Explicitly rejected by the review** (recorded so it isn't relitigated): no clap
+migration (zero-dep CLI is deliberate; bad args already exit 2 cleanly); no generic
+`HashChainedLedger<T>` (re-affirms D28); no engine awareness of git (rollback works
+*because* the engine is VCS-blind — s27/D38 proved it).
 
 ## Containerization (complete: C1–C3 s25/D36, C4–C5 s26/D37)
 - [x] **C1 — Multi-stage `Dockerfile`** (s25).
@@ -88,9 +133,10 @@ offline-bundle path in step 2.
    setup`, **cache `~/.kani` and the kani-verifier binary** (`actions/cache`; the setup
    download is ~hundreds of MB and slow), run `cargo test -- --ignored`. Confirm in the
    job logs that the kani tests *executed*, not skipped (the s23 log-check precedent).
-6. **Records:** decision D38+ (adoption + any premise corrections), `sprints/s27+/`
-   research/plans/meta, backlog + README status updates. Optionally note a future
-   "proof image" variant (builder stage + kani) under containerization.
+6. **Records:** next free decision number (D39+ — D38/s27 were taken by the rollback
+   guard) and next free sprint dir (s28+), research/plans/meta, backlog + README status
+   updates. Optionally note a future "proof image" variant (builder stage + kani) under
+   containerization.
 
 **Definition of done:** kani tests pass live in CI (log-verified, not just green),
 falsification case red, suite otherwise unchanged, zero frozen surfaces touched,
